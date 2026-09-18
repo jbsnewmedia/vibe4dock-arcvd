@@ -460,7 +460,7 @@
             thinking = document.createElement('details');
             thinking.className = 'thinking';
             var summary = document.createElement('summary');
-            summary.innerHTML = '<span class="spinner"></span>Thinking &amp; Tools';
+            summary.innerHTML = '<span class="spinner"></span>' + t('thinkingTools');
             thinking.appendChild(summary);
             thinkingBody = document.createElement('div');
             thinkingBody.className = 'thinking-body';
@@ -492,7 +492,7 @@
         });
         el.messages.innerHTML = '';
         if (!list.length) {
-            el.messages.innerHTML = '<div class="empty-state">' + esc(t('emptyState')) + '</div>';
+            el.messages.innerHTML = '<div class="empty-state" data-i18n="emptyState">' + esc(t('emptyState')) + '</div>';
             return;
         }
         list.forEach(function (m, idx) { el.messages.appendChild(renderMessage(m, idx === list.length - 1)); });
@@ -658,11 +658,11 @@
             box.className = 'pending-box';
             var title = document.createElement('div');
             title.className = 'q';
-            title.textContent = 'Permission: ' + (p.title || p.type || 'action');
+            title.textContent = t('permPrefix') + (p.title || p.type || t('permAction'));
             box.appendChild(title);
             var opts = document.createElement('div');
             opts.className = 'opts';
-            [['once', 'Allow'], ['always', 'Always allow'], ['reject', 'Deny']].forEach(function (pair) {
+            [['once', t('permAllow')], ['always', t('permAlways')], ['reject', t('permDeny')]].forEach(function (pair) {
                 var b = document.createElement('button');
                 b.type = 'button';
                 b.className = 'btn ' + (pair[0] === 'reject' ? 'btn-danger' : 'btn-primary');
@@ -769,7 +769,7 @@
                             state.lastRendered = null;
                             state.lastPendingSig = null;
                             el.sessionTitle.textContent = t('sessionChat');
-                            el.messages.innerHTML = '<div class="empty-state">' + esc(t('emptyState')) + '</div>';
+                            el.messages.innerHTML = '<div class="empty-state" data-i18n="emptyState">' + esc(t('emptyState')) + '</div>';
                         }
                         return loadSessions();
                     }).catch(function () {});
@@ -1081,12 +1081,12 @@
             }).catch(function (e) {
                 state.generating = false;
                 updateControls();
-                el.pending.innerHTML = '<div class="pending-box"><div class="q">Command error: ' + esc(e.message) + '</div></div>';
+                el.pending.innerHTML = '<div class="pending-box"><div class="q">' + esc(t('cmdErr')) + esc(e.message) + '</div></div>';
             });
         }).catch(function (e) {
             state.generating = false;
             updateControls();
-            el.pending.innerHTML = '<div class="pending-box"><div class="q">Fehler: ' + esc(e.message) + '</div></div>';
+            el.pending.innerHTML = '<div class="pending-box"><div class="q">' + esc(t('errPrefix')) + esc(e.message) + '</div></div>';
         });
     }
 
@@ -1135,8 +1135,8 @@
         }).catch(function (e) {
             state.generating = false;
             updateControls();
-            el.pending.innerHTML = '<div class="pending-box"><div class="q">Fehler: ' + esc(e.message) +
-                '</div>Hint: Is a provider configured? Run <code>opencode auth login</code> in the application shell or in this container.</div>';
+            el.pending.innerHTML = '<div class="pending-box"><div class="q">' + esc(t('errPrefix')) + esc(e.message) +
+                '</div>' + t('providerHint') + '</div>';
         });
     }
 
@@ -1325,6 +1325,7 @@
     /* Re-Render nach Sprachwechsel */
     document.addEventListener('i18n:change', function () {
         state.lastPendingSig = null;
+        state.lastRendered = null;
         renderPending();
         loadSessions();
         refresh();

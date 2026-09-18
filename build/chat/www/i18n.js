@@ -7,7 +7,7 @@
 
     var DICT = {
         de: {
-            docTitle: 'Chat - Vibe4Dock',
+            docTitle: 'Chat - {vibe} - Vibe4Dock',
             newChatBtn: '+ Neuer Chat',
             sidebarTitle: 'Seitenleiste',
             emptyState: 'Frag einfach \u2013 der Agent arbeitet direkt im Projektverzeichnis.',
@@ -28,6 +28,14 @@
             modelsZen: 'OpenCode Zen',
             modelsAll: 'Modelle',
             errPrefix: 'Fehler: ',
+            cmdErr: 'Command-Fehler: ',
+            providerHint: 'Hinweis: Ist ein Provider konfiguriert? In der Anwendungshell <code>opencode auth login</code> ausf\u00fchren oder den Container neu aufbauen.',
+            thinkingTools: 'Denkt & arbeitet',
+            permPrefix: 'Freigabe: ',
+            permAction: 'Aktion',
+            permAllow: 'Erlauben',
+            permAlways: 'Immer erlauben',
+            permDeny: 'Ablehnen',
             question: 'Frage',
             ownAnswerPh: 'Eigene Antwort (optional)',
             answerRequired: 'Bitte beantworte diese Frage \u2013 Option w\u00e4hlen oder eigene Antwort tippen.',
@@ -42,7 +50,7 @@
             cmdFilter: '{m} von {n} Commands \u2013 tippen zum Filtern'
         },
         en: {
-            docTitle: 'Chat - Vibe4Dock',
+            docTitle: 'Chat - {vibe} - Vibe4Dock',
             newChatBtn: '+ New chat',
             sidebarTitle: 'Toggle sidebar',
             emptyState: 'Ask anything \u2013 the agent works directly in the project directory.',
@@ -63,6 +71,14 @@
             modelsZen: 'OpenCode Zen',
             modelsAll: 'Models',
             errPrefix: 'Error: ',
+            cmdErr: 'Command error: ',
+            providerHint: 'Hint: Is a provider configured? Run <code>opencode auth login</code> in the application shell or rebuild the container.',
+            thinkingTools: 'Thinking &amp; Tools',
+            permPrefix: 'Permission: ',
+            permAction: 'action',
+            permAllow: 'Allow',
+            permAlways: 'Always allow',
+            permDeny: 'Deny',
             question: 'Question',
             ownAnswerPh: 'Custom answer (optional)',
             answerRequired: 'Please answer this question - pick an option or type a custom answer.',
@@ -95,7 +111,10 @@
             return 'en';
         }
 
+        var VIBE_NAME = (window.CHAT_CONFIG && window.CHAT_CONFIG.vibeName) || 'Vibe4Dock';
+
         function interpolate(s, vars) {
+            s = s.replace(/\{vibe\}/g, VIBE_NAME);
             if (!vars) return s;
             return s.replace(/\{(\w+)\}/g, function (m, k) {
                 return (vars[k] !== undefined) ? String(vars[k]) : m;

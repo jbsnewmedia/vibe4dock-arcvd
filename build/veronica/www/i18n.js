@@ -7,6 +7,7 @@
 
     var DICT = {
         de: {
+            docTitle: 'Veronica - {vibe} - Vibe4Dock',
             cmdNew: 'Neuen Chat starten',
             cmdHelp: 'Hilfe anzeigen',
             cmdClear: 'Chat-Verlauf leeren',
@@ -144,6 +145,7 @@
             recCancel: 'Abbrechen'
         },
         en: {
+            docTitle: 'Veronica - {vibe} - Vibe4Dock',
             cmdNew: 'Start a new chat',
             cmdHelp: 'Show help',
             cmdClear: 'Clear chat history',
@@ -299,7 +301,10 @@
             return 'en';
         }
 
+        var VIBE_NAME = (window.CHAT_CONFIG && window.CHAT_CONFIG.vibeName) || 'Vibe4Dock';
+
         function interpolate(s, vars) {
+            s = s.replace(/\{vibe\}/g, VIBE_NAME);
             if (!vars) return s;
             return s.replace(/\{(\w+)\}/g, function (m, k) {
                 return (vars[k] !== undefined) ? String(vars[k]) : m;

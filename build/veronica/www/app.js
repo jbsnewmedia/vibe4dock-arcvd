@@ -1351,8 +1351,8 @@
                     '<circle class="es-accent" cx="78" cy="80" r="14"/>' +
                     '<path class="es-stroke" stroke="white" stroke-width="2.5" d="M73 80l3 3 6-6"/>' +
                 '</svg>' +
-                '<h3>' + t('emptyTitle') + '</h3>' +
-                '<div>' + t('emptyBody') + '</div>';
+                '<h3 data-i18n="emptyTitle">' + esc(t('emptyTitle')) + '</h3>' +
+                '<div data-i18n="emptyBody">' + esc(t('emptyBody')) + '</div>';
             el.messages.appendChild(empty);
             renderUploadGroups(false);
             renderQueuedMessages(false);

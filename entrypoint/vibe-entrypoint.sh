@@ -125,12 +125,13 @@ ASSET_V="$(date +%s)"
 
 cat > "$CHAT_WWW/config.js" <<CFG
 window.CHAT_CONFIG = {
+    vibeName: "${VIBE_NAME}",
     provider: "$(resolve_chat_provider)",
     model: "$(resolve_chat_model)",
     agent: "$(resolve_chat_agent)"
 };
 CFG
-sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/config.js/config.js?v=${ASSET_V}/" "$CHAT_WWW/index.html"
+sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/config.js/config.js?v=${ASSET_V}/; s/i18n.js/i18n.js?v=${ASSET_V}/" "$CHAT_WWW/index.html"
 
 ALLOW_REGISTRATION="1"
 case "${VERONICA_ALLOW_REGISTRATION:-1}" in
@@ -139,13 +140,14 @@ esac
 
 cat > "$VERONICA_WWW/config.js" <<CFG
 window.CHAT_CONFIG = {
+    vibeName: "${VIBE_NAME}",
     provider: "$(resolve_vero_provider)",
     model: "$(resolve_vero_model)",
     agent: "$(resolve_vero_agent)",
     allowRegistration: "${ALLOW_REGISTRATION}"
 };
 CFG
-sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/config.js/config.js?v=${ASSET_V}/" "$VERONICA_WWW/index.html"
+sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/config.js/config.js?v=${ASSET_V}/; s/i18n.js/i18n.js?v=${ASSET_V}/" "$VERONICA_WWW/index.html"
 
 # ----------------------------------------------------------------------------
 # PWA name: VIBE_NAME (default: Vibe4Dock) drives the manifest app names and
@@ -182,7 +184,9 @@ MAN
 gen_manifest "$CHAT_WWW/manifest.json" chat "chat" "#16181d" "#16181d"
 gen_manifest "$VERONICA_WWW/manifest.json" veronica "veronica" "#54656f" "#f0f2f5"
 
-sed -i "s|<title>Vibe4Dock</title>|<title>${VIBE_NAME}</title>|" "$WEB_ROOT/index.php"
+sed -i "s|<title>Vibe4Dock</title>|<title>${VIBE_NAME} - Vibe4Dock</title>|" "$WEB_ROOT/index.php"
+sed -i "s|<h1>Vibe4Dock is running</h1>|<h1>${VIBE_NAME} is running</h1>|" "$WEB_ROOT/index.php"
+sed -i "s|<meta property=\"og:title\" content=\"[^\"]*\">|<meta property=\"og:title\" content=\"${VIBE_NAME}\">|" "$WEB_ROOT/index.php"
 sed -i "s|<h1>Vibe4Dock is running</h1>|<h1>${VIBE_NAME} is running</h1>|" "$WEB_ROOT/index.php"
 sed -i "s|<meta property=\"og:title\" content=\"[^\"]*\">|<meta property=\"og:title\" content=\"${VIBE_NAME}\">|" "$WEB_ROOT/index.php"
 

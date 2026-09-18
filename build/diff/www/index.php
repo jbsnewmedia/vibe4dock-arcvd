@@ -28,7 +28,7 @@ function lang(): string
 
 $T = [
     'en' => [
-        'title' => 'Vibe-Diff', 'repo' => 'Repository', 'branch' => 'Branch', 'detached' => 'detached',
+        'title' => 'Diff', 'repo' => 'Repository', 'branch' => 'Branch', 'detached' => 'detached',
         'branches' => 'Branches', 'checkout' => 'Checkout', 'commits' => 'Commits', 'useAsBase' => 'compare',
         'changes' => 'Changed files', 'noChanges' => 'No changes vs base.', 'base' => 'Compare with',
         'back' => 'Overview', 'revertFile' => 'Revert file', 'revertSelected' => 'Revert selected',
@@ -42,7 +42,7 @@ $T = [
         'footer' => 'Part of <strong>Vibe4Dock</strong> &middot; &copy; 2026+ <a href="https://jbs-newmedia.com" target="_blank" rel="noopener noreferrer">JBS New Media GmbH</a> &middot; Juergen Schwind &middot; <a href="https://github.com/jbsnewmedia/vibe4dock" target="_blank" rel="noopener noreferrer">vibe4dock</a> &middot; MIT License',
     ],
     'de' => [
-        'title' => 'Vibe-Diff', 'repo' => 'Repository', 'branch' => 'Branch', 'detached' => 'detached',
+        'title' => 'Diff', 'repo' => 'Repository', 'branch' => 'Branch', 'detached' => 'detached',
         'branches' => 'Branches', 'checkout' => 'Wechseln', 'commits' => 'Commits', 'useAsBase' => 'vergleichen',
         'changes' => 'Geänderte Dateien', 'noChanges' => 'Keine Änderungen gegenüber Base.', 'base' => 'Vergleichen mit',
         'back' => 'Übersicht', 'revertFile' => 'Datei zurücksetzen', 'revertSelected' => 'Auswahl zurücksetzen',
@@ -65,6 +65,7 @@ function t(string $k): string
 
 /* ------------------------------------------------------------- repo setup */
 
+$VIBE_NAME = preg_replace('/["\\\\|]/', '', getenv('VIBE_NAME') ?: 'Vibe4Dock') ?: 'Vibe4Dock';
 $REPO = getenv('VIBE_DIFF_REPO') ?: '/app';
 $REPO_REAL = realpath($REPO);
 $P = preg_replace('/[^a-z0-9_-]/i', '', getenv('VIBE_PREFIX') ?: 'vibe') ?: 'vibe';
@@ -448,7 +449,7 @@ $selCount = 0;
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?= $esc(t('title')) ?> - Vibe4Dock</title>
+<title><?= $esc(t('title')) ?> - <?= $esc($VIBE_NAME) ?> - Vibe4Dock</title>
 <link rel="stylesheet" href="style.css?v=<?= filemtime(__DIR__ . '/style.css') ?>">
 </head>
 <body>
