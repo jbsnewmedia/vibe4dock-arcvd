@@ -21,6 +21,7 @@
     var SESSIONS_KEY  = 'vibe4dock.veronica.sessions.';   // localStorage + alias (Mock-Modus)
     var MEMBERS_KEY   = 'vibe4dock.veronica.members.';    // localStorage + sessionId: [alias, …] (Gruppen)
     var MODEL_KEY     = 'vibe4dock.veronica.model';       // localStorage: "provider/model" (Modell-Auswahl)
+    var PLAN_KEY      = 'vibe4dock.veronica.planmode';    // localStorage: '1' = Plan-Modus aktiv
     var UPLOADS_KEY   = 'vibe4dock.veronica.uploads.';    // localStorage + sessionId: [{name, size, key, ts}]
 
     var STUCK_POLLS = 40;
@@ -28,6 +29,7 @@
     /* ---------- State ---------- */
     var state = {
         user: null,                // { alias }
+        planMode: storageGet(PLAN_KEY) === '1',
         backend: 'mock',           // 'mock' | 'api'
         sessions: [],
         sessionId: null,
@@ -89,6 +91,7 @@
         chatDeleteBtn:     document.getElementById('chat-delete-btn'),
         chatRemoveBtn:     document.getElementById('chat-remove-btn'),
         modelMenuBtn:      document.getElementById('model-menu-btn'),
+        planModeBtn:       document.getElementById('plan-mode-btn'),
         modelMenu:         document.getElementById('model-menu'),
         chatModelItems:    document.getElementById('model-menu-items'),
         newChat:           document.getElementById('new-chat'),
@@ -1768,7 +1771,7 @@
         if (!cur) { lastInlineQSig = null; return; }
         var reqId = cur.req.id || cur.req.requestID;
         var q = cur.q || {};
-        var sig = JSON.stringify([reqId, cur.answered, q.header, q.question, q.options]);
+        var sig = JSON.stringify([reqId, cur.answered, q.header, q.question, q.options, window.I18N.lang()]);
         if (sig !== lastInlineQSig) {
             lastInlineQSig = sig;
             host.innerHTML = '';
@@ -1903,7 +1906,7 @@
     }
 
     function renderPending() {
-        var sig = JSON.stringify([state.pendingQuestions, state.pendingPermissions]);
+        var sig = JSON.stringify([state.pendingQuestions, state.pendingPermissions, window.I18N.lang()]);
         if (sig === state.lastPendingSig) { return; }
         state.lastPendingSig = sig;
 
@@ -1945,6 +1948,49 @@
             el.pending.innerHTML = '';
         }
         renderInlineQuestions(false);
+    }
+
+    /* ---------- PLAN-MODUS ---------- */
+    function renderPlanToggle() {
+        if (!el.planModeBtn) return;
+        el.planModeBtn.classList.toggle('active', state.planMode);
+        el.planModeBtn.setAttribute('aria-pressed', state.planMode ? 'true' : 'false');
+    }
+
+    function togglePlanMode() {
+        state.planMode = !state.planMode;
+        storageSet(PLAN_KEY, state.planMode ? '1' : '0');
+        renderPlanToggle();
+        appendNotice(state.planMode ? t('planOn') : t('planOff'));
+        if (state.planMode && state.backend === 'api') {
+            startPlanMode();
+        }
+    }
+
+    function startPlanMode() {
+        var ensure = state.sessionId ? Promise.resolve() : createSession(t('planSession'));
+        ensure.then(function () {
+            var text = (el.prompt.value || '').trim() || t('planKickoff');
+            el.prompt.value = '';
+            el.prompt.style.height = 'auto';
+            state.generating = true;
+            updateComposerState();
+            setTyping(true);
+            var body = { parts: [{ type: 'text', text: text }], agent: 'plan' };
+            var pref = preferredModel();
+            if (pref) {
+                body.providerID = pref.providerID;
+                body.modelID = pref.modelID;
+            }
+            return api('POST', '/session/' + state.sessionId + '/prompt_async', body)
+                .then(function () { return refresh(); })
+                .catch(function (e) {
+                    state.generating = false;
+                    updateComposerState();
+                    setTyping(false);
+                    appendNotice(t('errPrefix') + e.message);
+                });
+        });
     }
 
     function answerQuestion(req, payload, onEcho) {
@@ -2404,7 +2450,9 @@
                     body.providerID = pref.providerID;
                     body.modelID = pref.modelID;
                 }
-                if (window.CHAT_CONFIG && window.CHAT_CONFIG.agent) {
+                if (state.planMode) {
+                    body.agent = 'plan';
+                } else if (window.CHAT_CONFIG && window.CHAT_CONFIG.agent) {
                     body.agent = window.CHAT_CONFIG.agent;
                 }
                 return api('POST', '/session/' + state.sessionId + '/prompt_async', body)
@@ -2990,6 +3038,9 @@
         el.loginPin.addEventListener('input', hideLoginError);
         el.loginPin2.addEventListener('input', hideLoginError);
 
+        /* PLAN-MODUS Toggle */
+        if (el.planModeBtn) el.planModeBtn.addEventListener('click', togglePlanMode);
+
         /* Logout */
         el.logout.addEventListener('click', logout);
 
@@ -3292,6 +3343,7 @@
         /* Erst die Server-DB laden, dann Boot fortfuehren */
         syncUsersFromServer().then(function () {
             attachEvents();
+            renderPlanToggle();
             ensureAdminExists();
             var saved = sessionGet(USER_KEY);
             var users = loadUsers();
@@ -3324,6 +3376,7 @@
             renderUploadGroups(true);
             el.statusText.textContent = state.generating ? t('statusTyping') : t('statusOnline');
         }
+        renderInlineQuestions(false);
         if (!el.adminModal.hidden) renderAdminUsers();
     }
 

@@ -22,6 +22,10 @@ CHAT_WWW="/app/chat-www"
 VERONICA_WWW="/app/veronica-www"
 CONFIG_DIR="/etc/vibe"
 FPM_SOCKET="/run/php-fpm-vibe.sock"
+VIBE_NAME="${VIBE_NAME:-Vibe4Dock}"
+VIBE_NAME="${VIBE_NAME//\"/}"
+VIBE_NAME="${VIBE_NAME//\\/}"
+VIBE_NAME="${VIBE_NAME//|/}"
 
 log() { echo "[vibe4dock-arcvd] $*"; }
 
@@ -154,10 +158,6 @@ sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/co
 # the start page title. Manifests are regenerated so id/scope always follow
 # the configured VIBE_PREFIX.
 # ----------------------------------------------------------------------------
-VIBE_NAME="${VIBE_NAME:-Vibe4Dock}"
-VIBE_NAME="${VIBE_NAME//\"/}"
-VIBE_NAME="${VIBE_NAME//\\/}"
-VIBE_NAME="${VIBE_NAME//|/}"
 
 gen_manifest() {
     local file="$1" app="$2" desc="$3" theme="$4" bg="$5"

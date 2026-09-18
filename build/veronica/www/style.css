@@ -2152,6 +2152,23 @@ a:hover { text-decoration: underline; }
     margin-right: 8px;
 }
 
+#model-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Header-Switch in gleicher Groesse wie der Plan-Toggle */
+#lang-switch-app.header-lang button {
+    font-size: 12px;
+    line-height: 1;
+    padding: 7px 12px;
+}
+
+#lang-switch-app.header-lang button svg {
+    display: none;
+}
+
 /* ============================================================
    VIBE4DOCK BRAND FOOTER (login + app)
    ============================================================ */
@@ -2181,4 +2198,31 @@ a:hover { text-decoration: underline; }
     padding: 6px 12px 8px;
     border-top: 1px solid var(--border);
     background: #f0f2f5;
+}
+
+/* PLAN-MODUS Toggle */
+#plan-mode-btn.plan-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 5px 12px;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+#plan-mode-btn.plan-toggle:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+#plan-mode-btn.plan-toggle.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
 }

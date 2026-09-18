@@ -8,6 +8,12 @@
     var DICT = {
         de: {
             docTitle: 'Veronica - {vibe} - Vibe4Dock',
+            planModeTitle: 'Plan mode',
+            planMode: 'Plan',
+            planOn: 'Planmodus aktiviert – der Startbefehl wurde an den Plan-Agent gesendet.',
+            planOff: 'Planmodus deaktiviert.',
+            planSession: 'Plan',
+            planKickoff: 'Erstelle bitte einen Plan für das aktuelle Projekt und die anstehende Aufgabe.',
             cmdNew: 'Neuen Chat starten',
             cmdHelp: 'Hilfe anzeigen',
             cmdClear: 'Chat-Verlauf leeren',
@@ -146,6 +152,12 @@
         },
         en: {
             docTitle: 'Veronica - {vibe} - Vibe4Dock',
+            planModeTitle: 'Plan mode',
+            planMode: 'Plan',
+            planOn: 'Plan mode enabled - the kickoff was sent to the plan agent.',
+            planOff: 'Plan mode disabled.',
+            planSession: 'Plan',
+            planKickoff: 'Please create a plan for the current project and the upcoming task.',
             cmdNew: 'Start a new chat',
             cmdHelp: 'Show help',
             cmdClear: 'Clear chat history',

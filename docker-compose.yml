@@ -20,10 +20,6 @@ services:
       VIBE_NAME: ${VIBE_NAME:-Vibe4Dock}
       HTTP_PORT: ${HTTP_PORT:-80}
       HTTPS_PORT: ${HTTPS_PORT:-}
-      # Branding line shown in the shell status bar (optional)
-      # SHELL_HINT: "Vibe4Dock AACV by JBS New Media | https://github.com/jbsnewmedia/vibe4dock-arcvd"
-      # SSL_CERT_PATH: /data/certs/cert.pem     # own certificates (optional)
-      # SSL_KEY_PATH: /data/certs/key.pem
 
       # --- Basic Auth (only active when username AND password are set) ---
       SITE_USERNAME: ${SITE_USERNAME:-}
@@ -42,8 +38,20 @@ services:
       OPENCODE_PROVIDER: ${OPENCODE_PROVIDER:-}
       OPENCODE_MODEL: ${OPENCODE_MODEL:-}
       OPENCODE_AGENT: ${OPENCODE_AGENT:-}
-      # CHAT_OPENCODE_MODEL: ...
-      # VERONICA_OPENCODE_MODEL: ...
+      # --- opencode per-service overrides (optional) ---
+      CHAT_OPENCODE_API_KEY: ${CHAT_OPENCODE_API_KEY:-}
+      CHAT_OPENCODE_PROVIDER: ${CHAT_OPENCODE_PROVIDER:-}
+      CHAT_OPENCODE_MODEL: ${CHAT_OPENCODE_MODEL:-}
+      CHAT_OPENCODE_AGENT: ${CHAT_OPENCODE_AGENT:-}
+      VERONICA_OPENCODE_API_KEY: ${VERONICA_OPENCODE_API_KEY:-}
+      VERONICA_OPENCODE_PROVIDER: ${VERONICA_OPENCODE_PROVIDER:-}
+      VERONICA_OPENCODE_MODEL: ${VERONICA_OPENCODE_MODEL:-}
+      VERONICA_OPENCODE_AGENT: ${VERONICA_OPENCODE_AGENT:-}
+      # --- Vibe-Diff / shell branding / TLS ---
+      VIBE_DIFF_REPO: ${VIBE_DIFF_REPO:-}
+      SHELL_HINT: ${SHELL_HINT:-}
+      SSL_CERT_PATH: ${SSL_CERT_PATH:-}
+      SSL_KEY_PATH: ${SSL_KEY_PATH:-}
 
       # --- Vibe-Diff (git working tree UI) ---
       # Repo path inside the container; default: parent of the webroot (/app).
