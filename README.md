@@ -1,6 +1,6 @@
 # jbsnewmedia/vibe4dock-arcvd
 
-**A**pplication shell· **R**oot shell · **C**hat · **V**eronica - all-in-one Docker image: **one** container instance, **one** HTTP(S) port, all services behind path routing.
+**A**pplication · **R**oot · **C**hat · **V**eronica · **D**iff - all-in-one Docker image: **one** container instance, **one** HTTP(S) port, all services behind path routing.
 
 | Route | Content |
 |---|---|
@@ -27,6 +27,7 @@ Routes (with `VIBE_PREFIX=vibe`):
 - http://localhost/
 - http://localhost/vibe-chat/
 - http://localhost/vibe-veronica/
+- http://localhost/vibe-diff/
 - http://localhost/vibe-shell-root/
 - http://localhost/vibe-shell-app/
 
@@ -44,7 +45,7 @@ See `.env.example` for all values.
 ### Routing
 
 - `VIBE_PREFIX` - prefix for all service routes (default `vibe`), allowed characters: `a-z`, `0-9`, `-`
-- `VIBE_NAME` - PWA app name (chat + veronica manifests) and start page title (default `Vibe4Dock`)
+- `VIBE_NAME` - PWA app name (chat + veronica manifests) and start page title (default `Vibe4Dock`); page titles follow the pattern `$VIBE_NAME - Vibe4Dock` (services: `$APP - $VIBE_NAME - Vibe4Dock`)
 - `SHELL_HINT` - branding line shown as the persistent tmux status bar inside the root/app shells (has a default with copyright + repo link)
 
 ### Basic Auth (via env)
@@ -80,6 +81,7 @@ Browser UI for the git repo behind the code: current branch, branch list (with c
 
 ### Veronica
 
+- **Plan mode toggle** - the header toggle sends a kickoff prompt with opencode's `plan` agent (`agent: 'plan'`) directly into the session; while on, every message from the send button runs in plan mode. State persists across reloads
 - `VERONICA_ALLOW_REGISTRATION` - registration in the UI (`1`/`0`)
 - `VERONICA_BOOTSTRAP_ADMIN` + `VERONICA_BOOTSTRAP_ADMIN_PIN_HASH` - admin seed, **only on first start** (when the JSON DB does not exist yet)
 - `VERONICA_BOOTSTRAP_USERS` - optional extra users `"alias:sha256:...,alias:sha256:..."`
@@ -112,12 +114,12 @@ Two variants exist (built from the same Dockerfile via `BASE_IMAGE` build-arg):
 
 ```bash
 # production
-docker build -t jbsnewmedia/vibe4dock-arcvd:1.0 .
-docker run --rm -p 8080:80 -e OPENCODE_API_KEY=... jbsnewmedia/vibe4dock-arcvd:1.0
+docker build -t jbsnewmedia/vibe4dock-arcvd:1.0.0 .
+docker run --rm -p 8080:80 -e OPENCODE_API_KEY=... jbsnewmedia/vibe4dock-arcvd:1.0.0
 
 # dev variant
 docker build --build-arg BASE_IMAGE=webdevops/php-apache-dev:8.5 --build-arg VARIANT=dev \
-    -t jbsnewmedia/vibe4dock-arcvd:1.0-dev .
+    -t jbsnewmedia/vibe4dock-arcvd:1.0.0-dev .
 ```
 
 ## Release (Docker Hub)
@@ -127,19 +129,23 @@ The GitHub Actions workflow `.github/workflows/docker.yml` builds and pushes on 
 | Git tag | Docker Hub tags (production) | Docker Hub tags (dev) |
 |---|---|---|
 | push to `main` | `latest` | `latest-dev` |
-| `v1.0.0` | `1.0.0`, `1.0`, `latest` | `1.0.0-dev`, `1.0-dev`, `latest-dev` |
-| `v1.0.1` | `1.0.1`, `1.0`, `latest` | `1.0.1-dev`, `1.0-dev`, `latest-dev` |
+| `1.0.0` or `v1.0.0` | `1.0.0`, `1.0`, `latest` | `1.0.0-dev`, `1.0-dev`, `latest-dev` |
+| `1.0.1` or `v1.0.1` (example patch) | `1.0.1`, `1.0`, `latest` | `1.0.1-dev`, `1.0-dev`, `latest-dev` |
+
+Release notes per version live in `doc/rls/` (see `1.0.0.md`).
 
 One-time setup in repo settings -> *Secrets and variables* -> *Actions* -> *New repository secret*:
 
 - `DOCKERHUB_USERNAME` - Docker Hub login (`jbsnewmedia`)
 - `DOCKERHUB_TOKEN` - Docker Hub -> Account Settings -> *Personal access tokens* -> *Generate new token* (permissions: Read & Write)
 
-First release and patch releases:
+First release (bare and v-prefixed tags both trigger the workflow):
 
 ```bash
-git tag v1.0.0 && git push origin v1.0.0
+git tag 1.0.0 && git push origin 1.0.0
 ```
+
+Patch releases afterwards: `git tag 1.0.1 && git push origin 1.0.1`.
 
 ### Re-publishing the same tag (force-move)
 
