@@ -2141,9 +2141,11 @@ a:hover { text-decoration: underline; }
     font-weight: 700;
 }
 
-.login-card .lang-switch {
+#login-card .lang-switch {
     margin-top: 20px;
     align-self: center;
+    width: max-content;
+    margin-inline: auto;
 }
 
 #lang-switch-app.header-lang {

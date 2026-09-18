@@ -16,6 +16,8 @@ services:
     environment:
       # --- Routing ---
       VIBE_PREFIX: ${VIBE_PREFIX:-vibe}
+      # PWA app name + start page title (default: Vibe4Dock)
+      VIBE_NAME: ${VIBE_NAME:-Vibe4Dock}
       HTTP_PORT: ${HTTP_PORT:-80}
       HTTPS_PORT: ${HTTPS_PORT:-}
       # Branding line shown in the shell status bar (optional)

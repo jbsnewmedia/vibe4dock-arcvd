@@ -147,6 +147,45 @@ window.CHAT_CONFIG = {
 CFG
 sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/config.js/config.js?v=${ASSET_V}/" "$VERONICA_WWW/index.html"
 
+# ----------------------------------------------------------------------------
+# PWA name: VIBE_NAME (default: Vibe4Dock) drives the manifest app names and
+# the start page title. Manifests are regenerated so id/scope always follow
+# the configured VIBE_PREFIX.
+# ----------------------------------------------------------------------------
+VIBE_NAME="${VIBE_NAME:-Vibe4Dock}"
+VIBE_NAME="${VIBE_NAME//\"/}"
+VIBE_NAME="${VIBE_NAME//\\/}"
+VIBE_NAME="${VIBE_NAME//|/}"
+
+gen_manifest() {
+    local file="$1" app="$2" desc="$3" theme="$4" bg="$5"
+    cat > "$file" <<MAN
+{
+    "id": "/${VIBE_PREFIX}-${app}/",
+    "name": "${VIBE_NAME}",
+    "short_name": "${VIBE_NAME}",
+    "description": "${VIBE_NAME} - ${desc}",
+    "start_url": "./",
+    "scope": "./",
+    "display": "standalone",
+    "background_color": "${bg}",
+    "theme_color": "${theme}",
+    "icons": [
+        { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+        { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+        { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    ]
+}
+MAN
+}
+
+gen_manifest "$CHAT_WWW/manifest.json" chat "chat" "#16181d" "#16181d"
+gen_manifest "$VERONICA_WWW/manifest.json" veronica "veronica" "#54656f" "#f0f2f5"
+
+sed -i "s|<title>Vibe4Dock</title>|<title>${VIBE_NAME}</title>|" "$WEB_ROOT/index.php"
+sed -i "s|<h1>Vibe4Dock is running</h1>|<h1>${VIBE_NAME} is running</h1>|" "$WEB_ROOT/index.php"
+sed -i "s|<meta property=\"og:title\" content=\"[^\"]*\">|<meta property=\"og:title\" content=\"${VIBE_NAME}\">|" "$WEB_ROOT/index.php"
+
 chown -R application:application "$CHAT_WWW" "$VERONICA_WWW"
 
 # ----------------------------------------------------------------------------
@@ -357,6 +396,20 @@ chmod +x "$CONFIG_DIR/run/"*.sh
 } > /etc/apache2/ports.conf
 
 echo "ServerName localhost" > /etc/apache2/conf-enabled/vibe-globals.conf
+
+# Security hardening: hide server version, send baseline security headers
+cat > /etc/apache2/conf-enabled/vibe-security.conf <<'SEC'
+ServerTokens Prod
+ServerSignature Off
+
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), camera=(), microphone=(), payment=(), usb=()"
+    Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' *; font-src 'self' data:; base-uri 'self'; frame-ancestors 'self'"
+</IfModule>
+SEC
 
 # ----------------------------------------------------------------------------
 # Apache routing (shared between HTTP and HTTPS vhost)

@@ -44,6 +44,7 @@ See `.env.example` for all values.
 ### Routing
 
 - `VIBE_PREFIX` - prefix for all service routes (default `vibe`), allowed characters: `a-z`, `0-9`, `-`
+- `VIBE_NAME` - PWA app name (chat + veronica manifests) and start page title (default `Vibe4Dock`)
 - `SHELL_HINT` - branding line shown as the persistent tmux status bar inside the root/app shells (has a default with copyright + repo link)
 
 ### Basic Auth (via env)
