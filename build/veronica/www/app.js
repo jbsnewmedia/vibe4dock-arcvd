@@ -2248,11 +2248,13 @@
         });
     }
 
-    function loadModelsForMenu() {
+    function loadModelsForMenu(attempt) {
         if (modelMenuLoading || state.backend !== 'api') { renderModelMenu(); return; }
         modelMenuLoading = true;
-        api('GET', '/config/providers', null, 8000).then(function (res) {
+        var tryN = attempt || 0;
+        api('GET', '/config/providers', null, 20000).then(function (res) {
             var providers = (res && res.providers) || [];
+            if (!providers.length) { throw new Error('no providers'); }
             var defaults = (res && res.default) || {};
             var known = {};
             providers.forEach(function (p) {
@@ -2292,6 +2294,11 @@
                     renderModelMenu();
                 });
         }).catch(function () {
+            /* kalter opencode-Start: providers-Call kann (noch) leer/fehlerhaft sein */
+            if (tryN < 2) {
+                modelMenuLoading = false;
+                return new Promise(function (r) { setTimeout(r, 2500); }).then(function () { loadModelsForMenu(tryN + 1); });
+            }
             renderModelMenu();
         }).then(function () { modelMenuLoading = false; });
     }

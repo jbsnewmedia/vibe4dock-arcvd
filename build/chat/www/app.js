@@ -213,12 +213,13 @@
         return null;
     }
 
-    function loadModels() {
+    function loadModels(attempt) {
         if (!el.modelSelect) { return Promise.resolve(); }
+        var tryN = attempt || 0;
         return api('GET', '/config/providers').then(function (res) {
             var providers = (res && res.providers) || [];
             var defaults = (res && res.default) || {};
-            if (!providers.length) { return; }
+            if (!providers.length) { throw new Error('no providers'); }
             var known = {};
             providers.forEach(function (p) {
                 var models = p.models || {};
@@ -282,7 +283,13 @@
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (local) { finish(local || null); })
                 .catch(function () { finish(null); });
-        }).catch(function () {});
+        }).catch(function () {
+            /* kalter opencode-Start: providers-Call kann (noch) leer/fehlerhaft sein */
+            if (tryN < 2) {
+                return new Promise(function (r) { setTimeout(r, 2500); }).then(function () { return loadModels(tryN + 1); });
+            }
+            return Promise.resolve();
+        });
     }
 
     function placePopup(popup) {
