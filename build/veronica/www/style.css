@@ -2234,15 +2234,7 @@ a:hover { text-decoration: underline; }
 #lang-switch-menu { display: none; }
 
 @media (max-width: 759px) {
-    /* Status: nur gruener Punkt, kein Text (ueberlappt sonst den Plan-Toggle) */
-    #topbar .meta .status {
-        font-size: 0;
-        gap: 0;
-    }
-    #topbar .meta .status::before {
-        width: 7px;
-        height: 7px;
-    }
+    /* Status-Text wieder sichtbar (Plan-Toggle ist jetzt icon-only) */
 
     /* Plan-Toggle: nur Icon */
     #plan-mode-btn.plan-toggle span { display: none; }

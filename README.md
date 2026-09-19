@@ -130,9 +130,9 @@ The GitHub Actions workflow `.github/workflows/docker.yml` builds and pushes on 
 |---|---|---|
 | push to `main` | `latest` | `latest-dev` |
 | `1.0.0` or `v1.0.0` | `1.0.0`, `1.0`, `latest` | `1.0.0-dev`, `1.0-dev`, `latest-dev` |
-| `1.0.1` or `v1.0.1` (example patch) | `1.0.1`, `1.0`, `latest` | `1.0.1-dev`, `1.0-dev`, `latest-dev` |
+| `1.0.1` or `v1.0.1` (current patch release) | `1.0.1`, `1.0`, `latest` | `1.0.1-dev`, `1.0-dev`, `latest-dev` |
 
-Release notes per version live in `doc/rls/` (see `1.0.0.md`).
+Release notes per version live in `doc/rls/` (see `1.0.0.md`, `1.0.1.md`).
 
 One-time setup in repo settings -> *Secrets and variables* -> *Actions* -> *New repository secret*:
 
