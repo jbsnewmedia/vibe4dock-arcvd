@@ -163,6 +163,8 @@ body::before {
 .bubble table { border-collapse: collapse; margin: 0 0 10px; font-size: 0.92em; display: block; overflow-x: auto; max-width: 100%; }
 .bubble th, .bubble td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
 .bubble th { background: var(--primary-dim); color: var(--text-white); }
+.bubble li.task { list-style: none; }
+.bubble li.task input[type="checkbox"] { margin: 0 6px 2px 0; vertical-align: middle; accent-color: var(--primary); }
 
 details.thinking {
     background: var(--bg-card);

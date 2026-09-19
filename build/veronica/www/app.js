@@ -239,86 +239,8 @@
     }
 
     /* ============================================================
-       MARKDOWN (minimal, sicher)
+       MARKDOWN → gemeinsamer Renderer in md.js (global md())
        ============================================================ */
-    function mdInline(s) {
-        return esc(s)
-            .replace(/`([^`\n]+)`/g, '<code>$1</code>')
-            .replace(/\[([^\]\n]+)\]\((https?:[^\s)]+)\)/g,
-                '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-            .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-            .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, '$1<em>$2</em>');
-    }
-
-    function mdBlock(text) {
-        var lines = text.split('\n');
-        var out = [];
-        var para = [];
-        function flush() {
-            if (para.length) {
-                out.push('<p>' + para.map(mdInline).join('<br>') + '</p>');
-                para = [];
-            }
-        }
-        var i = 0;
-        while (i < lines.length) {
-            var line = lines[i];
-            if (!line.trim()) { flush(); i++; continue; }
-            if (/^```/.test(line)) {
-                flush();
-                var code = [];
-                i++;
-                while (i < lines.length && !/^```/.test(lines[i])) {
-                    code.push(lines[i]);
-                    i++;
-                }
-                i++;
-                out.push('<pre><code>' + esc(code.join('\n')) + '</code></pre>');
-                continue;
-            }
-            var h = line.match(/^(#{1,4})\s+(.*)$/);
-            if (h) {
-                flush();
-                out.push('<h' + h[1].length + '>' + mdInline(h[2]) + '</h' + h[1].length + '>');
-                i++;
-                continue;
-            }
-            if (/^\s*[-*+]\s+/.test(line)) {
-                flush();
-                out.push('<ul>');
-                while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
-                    out.push('<li>' + mdInline(lines[i].replace(/^\s*[-*+]\s+/, '')) + '</li>');
-                    i++;
-                }
-                out.push('</ul>');
-                continue;
-            }
-            if (/^\s*\d+[.)]\s+/.test(line)) {
-                flush();
-                out.push('<ol>');
-                while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) {
-                    out.push('<li>' + mdInline(lines[i].replace(/^\s*\d+[.)]\s+/, '')) + '</li>');
-                    i++;
-                }
-                out.push('</ol>');
-                continue;
-            }
-            if (/^\s*>\s?/.test(line)) {
-                flush();
-                var quote = [];
-                while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
-                    quote.push(lines[i].replace(/^\s*>\s?/, ''));
-                    i++;
-                }
-                out.push('<blockquote>' + quote.map(mdInline).join('<br>') + '</blockquote>');
-                continue;
-            }
-            para.push(line);
-            i++;
-        }
-        flush();
-        return out.join('');
-    }
 
     /* ============================================================
        LOGIN & USER-VERWALTUNG (Server-JSON-DB + localStorage-Cache)
@@ -1237,7 +1159,7 @@
         for (var i = 0; i < parts.length; i++) {
             var p = parts[i];
             if (p.type === 'text' && p.text) {
-                bubble.insertAdjacentHTML('beforeend', mdBlock(p.text));
+                bubble.insertAdjacentHTML('beforeend', md(p.text));
                 hasContent = true;
             } else if (p.type === 'voice' && role === 'user' && p.duration != null) {
                 bubble.appendChild(buildVoiceBubble(p.duration));

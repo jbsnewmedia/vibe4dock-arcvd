@@ -141,7 +141,7 @@ window.CHAT_CONFIG = {
     agent: "$(resolve_chat_agent)"
 };
 CFG
-sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/config.js/config.js?v=${ASSET_V}/; s/i18n.js/i18n.js?v=${ASSET_V}/" "$CHAT_WWW/index.html"
+sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/config.js/config.js?v=${ASSET_V}/; s/i18n.js/i18n.js?v=${ASSET_V}/; s/md.js/md.js?v=${ASSET_V}/" "$CHAT_WWW/index.html"
 
 ALLOW_REGISTRATION="1"
 case "${VERONICA_ALLOW_REGISTRATION:-1}" in
@@ -157,7 +157,7 @@ window.CHAT_CONFIG = {
     allowRegistration: "${ALLOW_REGISTRATION}"
 };
 CFG
-sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/config.js/config.js?v=${ASSET_V}/; s/i18n.js/i18n.js?v=${ASSET_V}/" "$VERONICA_WWW/index.html"
+sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/config.js/config.js?v=${ASSET_V}/; s/i18n.js/i18n.js?v=${ASSET_V}/; s/md.js/md.js?v=${ASSET_V}/" "$VERONICA_WWW/index.html"
 
 # ----------------------------------------------------------------------------
 # PWA name: VIBE_NAME (default: Vibe4Dock) drives the manifest app names and
