@@ -60,6 +60,12 @@ write_htpasswd() {
     return 1
 }
 
+# models.json liegt unter /home/... (Directory-Deny-Default). Ohne eigene
+# Require-Zeile in der Location gilt das Deny -> 403. Daher: mit Service-Auth
+# schuetzen, ohne Service-Auth explizit freigeben.
+CHAT_MODELS_AUTH="${CHAT_AUTH_BLOCK:-Require all granted}"
+VERONICA_MODELS_AUTH="${VERONICA_AUTH_BLOCK:-Require all granted}"
+
 auth_block() {
     local htpasswd="$1" realm="$2"
     cat <<AUTH
@@ -429,6 +435,7 @@ ${CHAT_AUTH_BLOCK}
 ProxyPass /${P}-chat/api/ http://127.0.0.1:4577/ retry=0
 Alias /${P}-chat/models.json /home/application/.local/state/opencode/model.json
 <Location /${P}-chat/models.json>
+${CHAT_MODELS_AUTH}
     ForceType application/json
     Header set Cache-Control "no-cache"
 </Location>
@@ -443,6 +450,7 @@ Alias /${P}-veronica/api/users /app/php/veronica-users-api.php
 ProxyPass /${P}-veronica/api/ http://127.0.0.1:4578/ retry=0
 Alias /${P}-veronica/models.json /home/application/.local/state/opencode/model.json
 <Location /${P}-veronica/models.json>
+${VERONICA_MODELS_AUTH}
     ForceType application/json
     Header set Cache-Control "no-cache"
 </Location>

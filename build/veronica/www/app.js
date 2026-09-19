@@ -1957,40 +1957,47 @@
         el.planModeBtn.setAttribute('aria-pressed', state.planMode ? 'true' : 'false');
     }
 
-    function togglePlanMode() {
-        state.planMode = !state.planMode;
+    function setPlan(on) {
+        state.planMode = !!on;
         storageSet(PLAN_KEY, state.planMode ? '1' : '0');
         renderPlanToggle();
-        appendNotice(state.planMode ? t('planOn') : t('planOff'));
-        if (state.planMode && state.backend === 'api') {
-            startPlanMode();
+    }
+
+    function togglePlanMode() {
+        var wasOn = state.planMode;
+        setPlan(!wasOn);
+        appendNotice(!wasOn ? t('planOn') : t('planOff'));
+        /* GO: beim Deaktivieren startet die Umsetzung (Standard-Agent) */
+        if (wasOn) {
+            sendPlanGo();
         }
     }
 
-    function startPlanMode() {
-        var ensure = state.sessionId ? Promise.resolve() : createSession(t('planSession'));
-        ensure.then(function () {
-            var text = (el.prompt.value || '').trim() || t('planKickoff');
-            el.prompt.value = '';
-            el.prompt.style.height = 'auto';
-            state.generating = true;
-            updateComposerState();
-            setTyping(true);
-            var body = { parts: [{ type: 'text', text: text }], agent: 'plan' };
-            var pref = preferredModel();
-            if (pref) {
-                body.providerID = pref.providerID;
-                body.modelID = pref.modelID;
-            }
-            return api('POST', '/session/' + state.sessionId + '/prompt_async', body)
-                .then(function () { return refresh(); })
-                .catch(function (e) {
-                    state.generating = false;
-                    updateComposerState();
-                    setTyping(false);
-                    appendNotice(t('errPrefix') + e.message);
-                });
-        });
+    function sendPlanGo() {
+        if (state.backend !== 'api' || !state.sessionId) { return; }
+        var text = (el.prompt.value || '').trim() || t('planGo');
+        el.prompt.value = '';
+        el.prompt.style.height = 'auto';
+        state.generating = true;
+        updateComposerState();
+        setTyping(true);
+        var body = { parts: [{ type: 'text', text: text }] };
+        var pref = preferredModel();
+        if (pref) {
+            body.providerID = pref.providerID;
+            body.modelID = pref.modelID;
+        }
+        if (window.CHAT_CONFIG && window.CHAT_CONFIG.agent) {
+            body.agent = window.CHAT_CONFIG.agent;
+        }
+        api('POST', '/session/' + state.sessionId + '/prompt_async', body)
+            .then(function () { return refresh(); })
+            .catch(function (e) {
+                state.generating = false;
+                updateComposerState();
+                setTyping(false);
+                appendNotice(t('errPrefix') + e.message);
+            });
     }
 
     function answerQuestion(req, payload, onEcho) {
@@ -2436,11 +2443,13 @@
 
         var displayTitle = text.slice(0, 40) + (text.length > 40 ? '…' : '');
 
+        var freshSession = !state.sessionId;
         var ensure = state.sessionId
             ? Promise.resolve(getCurrentSession())
             : createSession(displayTitle);
 
         ensure.then(function () {
+            if (freshSession) { setPlan(true); }
             el.prompt.value = '';
             el.prompt.style.height = 'auto';
             state.forcedIdle = false;
@@ -3001,6 +3010,7 @@
     }
 
     function newChat() {
+        setPlan(true);
         state.sessionId = null;
         state.lastRendered = null;
         state.lastMsgs = [];

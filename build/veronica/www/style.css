@@ -2226,3 +2226,30 @@ a:hover { text-decoration: underline; }
     border-color: var(--primary);
     color: #fff;
 }
+
+
+/* ============================================================
+   MOBILE TOPBAR (< 760px, Sidebar default aus)
+   ============================================================ */
+#lang-switch-menu { display: none; }
+
+@media (max-width: 759px) {
+    /* Status: nur gruener Punkt, kein Text (ueberlappt sonst den Plan-Toggle) */
+    #topbar .meta .status {
+        font-size: 0;
+        gap: 0;
+    }
+    #topbar .meta .status::before {
+        width: 7px;
+        height: 7px;
+    }
+
+    /* Plan-Toggle: nur Icon */
+    #plan-mode-btn.plan-toggle span { display: none; }
+    #plan-mode-btn.plan-toggle { padding: 5px 8px; gap: 0; }
+
+    /* DE/EN: nur im Chat-Menue */
+    #lang-switch-app { display: none !important; }
+    #lang-switch-menu { display: flex; justify-content: center; }
+    #lang-switch-menu .lang-switch button { font-size: 12px; padding: 7px 12px; }
+}
