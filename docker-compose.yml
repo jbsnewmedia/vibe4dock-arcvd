@@ -5,7 +5,7 @@
 
 services:
   vibe4dock:
-    image: jbsnewmedia/vibe4dock-arcvd:1.0.0
+    image: jbsnewmedia/vibe4dock-arcvd:1.0.2
     # build: .            # alternatively build locally
     container_name: arcvd
     ports:
@@ -47,6 +47,8 @@ services:
       VERONICA_OPENCODE_PROVIDER: ${VERONICA_OPENCODE_PROVIDER:-}
       VERONICA_OPENCODE_MODEL: ${VERONICA_OPENCODE_MODEL:-}
       VERONICA_OPENCODE_AGENT: ${VERONICA_OPENCODE_AGENT:-}
+      # --- File uploads (optional; default /app/project/incoming) ---
+      VIBE_INCOMING_DIR: ${VIBE_INCOMING_DIR:-}
       # --- Vibe-Diff / shell branding / TLS ---
       VIBE_DIFF_REPO: ${VIBE_DIFF_REPO:-}
       SHELL_HINT: ${SHELL_HINT:-}

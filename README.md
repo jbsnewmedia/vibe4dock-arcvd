@@ -63,6 +63,10 @@ General rule: **auth is only active when BOTH username and password are set.**
 Shared: `OPENCODE_API_KEY`, `OPENCODE_PROVIDER`, `OPENCODE_MODEL`, `OPENCODE_AGENT`.
 Per-service overrides: `CHAT_OPENCODE_*` or `VERONICA_OPENCODE_*` (API_KEY, PROVIDER, MODEL, AGENT).
 
+### File uploads (Chat + Veronica)
+
+The 📎 button uploads to the project's `incoming/` directory; files are referenced in the prompt via `@filename`. Optional: `VIBE_INCOMING_DIR` overrides the target directory (default `/app/project/incoming`; set it if the project bind mount is read-only). Upload limit: 100 MB per file.
+
 ### Vibe-Diff (git working tree UI)
 
 Browser UI for the git repo behind the code: current branch, branch list (with checkout), last 50 commits, changed files, and a unified diff view with **line-level and block-level revert** (like an IDE) plus whole-file revert. Language follows the `vibe4dock.lang` cookie (set by the chat/veronica UIs or the DE/EN switch in the header).
@@ -114,12 +118,12 @@ Two variants exist (built from the same Dockerfile via `BASE_IMAGE` build-arg):
 
 ```bash
 # production
-docker build -t jbsnewmedia/vibe4dock-arcvd:1.0.0 .
-docker run --rm -p 8080:80 -e OPENCODE_API_KEY=... jbsnewmedia/vibe4dock-arcvd:1.0.0
+docker build -t jbsnewmedia/vibe4dock-arcvd:1.0.2 .
+docker run --rm -p 8080:80 -e OPENCODE_API_KEY=... jbsnewmedia/vibe4dock-arcvd:1.0.2
 
 # dev variant
 docker build --build-arg BASE_IMAGE=webdevops/php-apache-dev:8.5 --build-arg VARIANT=dev \
-    -t jbsnewmedia/vibe4dock-arcvd:1.0.0-dev .
+    -t jbsnewmedia/vibe4dock-arcvd:1.0.2-dev .
 ```
 
 ## Release (Docker Hub)
@@ -130,9 +134,10 @@ The GitHub Actions workflow `.github/workflows/docker.yml` builds and pushes on 
 |---|---|---|
 | push to `main` | `latest` | `latest-dev` |
 | `1.0.0` or `v1.0.0` | `1.0.0`, `1.0`, `latest` | `1.0.0-dev`, `1.0-dev`, `latest-dev` |
-| `1.0.1` or `v1.0.1` (current patch release) | `1.0.1`, `1.0`, `latest` | `1.0.1-dev`, `1.0-dev`, `latest-dev` |
+| `1.0.1` or `v1.0.1` | `1.0.1`, `1.0`, `latest` | `1.0.1-dev`, `1.0-dev`, `latest-dev` |
+| `1.0.2` or `v1.0.2` (current patch release) | `1.0.2`, `1.0`, `latest` | `1.0.2-dev`, `1.0-dev`, `latest-dev` |
 
-Release notes per version live in `doc/rls/` (see `1.0.0.md`, `1.0.1.md`).
+Release notes per version live in `doc/rls/` (see `1.0.0.md`, `1.0.1.md`, `1.0.2.md`).
 
 One-time setup in repo settings -> *Secrets and variables* -> *Actions* -> *New repository secret*:
 
