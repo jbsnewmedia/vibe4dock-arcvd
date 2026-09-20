@@ -148,6 +148,7 @@
             loginAliasPh: '2–3 Zeichen, z. B. ab',
             loginPinPh: 'mind. 4 Zeichen',
             loginPin2Label: 'PIN wiederholen',
+            rememberLogin: 'Angemeldet bleiben',
             dropText: 'Dateien hier ablegen zum Hochladen',
             recCancel: 'Abbrechen'
         },
@@ -293,6 +294,7 @@
             loginAliasPh: '2–3 characters, e.g. ab',
             loginPinPh: 'min. 4 characters',
             loginPin2Label: 'Repeat PIN',
+            rememberLogin: 'Remember me',
             dropText: 'Drop files here to upload',
             recCancel: 'Cancel'
         }

@@ -16,6 +16,7 @@
     var USERS_KEY     = 'vibe4dock.veronica.users';       // { alias: { pin: hash, createdAt, admin } }
     var SETTINGS_KEY  = 'vibe4dock.veronica.settings';    // { allowRegistration: true|false } (Admin-Override)
     var USER_KEY      = 'vibe4dock.veronica.user';        // sessionStorage: aktueller Alias
+    var REMEMBER_KEY  = 'vibe4dock.veronica.remember';    // localStorage: {alias, pinHash, ts} - "Angemeldet bleiben"; PIN-Wechsel macht ihn ungueltig (Hash-Vergleich)
     var LAST_KEY      = 'vibe4dock.veronica.last.';       // sessionStorage + alias: letzte Session
     var SEEN_KEY      = 'vibe4dock.veronica.seen.';       // localStorage + alias: { sessionId: ts }
     var SESSIONS_KEY  = 'vibe4dock.veronica.sessions.';   // localStorage + alias (Mock-Modus)
@@ -67,6 +68,7 @@
         loginPin:          document.getElementById('login-pin'),
         loginPin2Wrap:     document.getElementById('login-pin2-wrap'),
         loginPin2:         document.getElementById('login-pin2'),
+        loginRemember:     document.getElementById('login-remember'),
         loginError:        document.getElementById('login-error'),
         loginSubmit:       document.getElementById('login-submit'),
         loginToggle:       document.getElementById('login-toggle'),
@@ -668,7 +670,7 @@
                 users[alias] = { pin: hash, createdAt: Date.now() };
                 if (isFirstUser) users[alias].admin = true;
                 saveUsers(users);
-                loginAs(alias);
+                loginAs(alias, hash, el.loginRemember.checked);
             });
             return;
         }
@@ -683,13 +685,39 @@
                 el.loginPin.select();
                 return;
             }
-            loginAs(alias);
+            loginAs(alias, hash, el.loginRemember.checked);
         });
     }
 
-    function loginAs(alias) {
+    /* Gemerkter Login ("Angemeldet bleiben"): nur gueltig, solange der
+       gespeicherte PIN-Hash zum aktuellen User-Record passt. Nach einer
+       PIN-Aenderung (Admin/Selbst) verweigert der Vergleich den Auto-Login
+       und der gemerkte Eintrag wird verworfen. */
+    function loadRemembered(users) {
+        var raw = storageGet(REMEMBER_KEY);
+        if (!raw) { return null; }
+        var r = null;
+        try { r = JSON.parse(raw); } catch (e) { r = null; }
+        if (!r || !r.alias || !r.pinHash || !users[r.alias]) {
+            storageDel(REMEMBER_KEY);
+            return null;
+        }
+        if (users[r.alias].pin !== r.pinHash) {
+            storageDel(REMEMBER_KEY);
+            return null;
+        }
+        return r;
+    }
+
+    function loginAs(alias, pinHash, remember) {
         state.user = { alias: alias, admin: isAdminAlias(alias) };
         sessionSet(USER_KEY, alias);
+        if (remember && pinHash) {
+            storageSet(REMEMBER_KEY, JSON.stringify({ alias: alias, pinHash: pinHash, ts: Date.now() }));
+        } else {
+            storageDel(REMEMBER_KEY);
+        }
+        if (el.loginRemember) { el.loginRemember.checked = false; }
         el.loginPin.value = '';
         el.loginPin2.value = '';
         hideLoginError();
@@ -699,6 +727,7 @@
     function logout() {
         var doLogout = function () {
             sessionDel(USER_KEY);
+            storageDel(REMEMBER_KEY);
             state.user = null;
             state.sessions = [];
             state.sessionId = null;
@@ -3341,6 +3370,14 @@
             var users = loadUsers();
             if (saved && users[saved]) {
                 state.user = { alias: saved, admin: !!(users[saved] && users[saved].admin) };
+                bootApp();
+                return;
+            }
+            /* "Angemeldet bleiben": Auto-Login nur bei unveraenderter PIN */
+            var remembered = loadRemembered(users);
+            if (remembered) {
+                state.user = { alias: remembered.alias, admin: !!(users[remembered.alias] && users[remembered.alias].admin) };
+                sessionSet(USER_KEY, remembered.alias);
                 bootApp();
                 return;
             }

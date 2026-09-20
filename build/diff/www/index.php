@@ -39,7 +39,7 @@ $T = [
         'selectHint' => 'Tick lines, then "Revert selected" - changed lines are restored to their original state.',
         'error' => 'Error', 'ok' => 'OK', 'working' => 'Working tree', 'diffTo' => 'Diff',
         'lgMod' => 'modified', 'lgAdd' => 'added (staged)', 'lgDel' => 'deleted', 'lgRen' => 'renamed', 'lgUnt' => 'untracked',
-        'footer' => 'Part of <strong>Vibe4Dock</strong> &middot; &copy; 2026+ <a href="https://jbs-newmedia.com" target="_blank" rel="noopener noreferrer">JBS New Media GmbH</a> &middot; Juergen Schwind &middot; <a href="https://github.com/jbsnewmedia/vibe4dock" target="_blank" rel="noopener noreferrer">vibe4dock</a> &middot; MIT License',
+        'footer' => 'Part of <a href="https://github.com/jbsnewmedia/vibe4dock-arcvd" target="_blank" rel="noopener noreferrer"><strong>Vibe4Dock</strong></a> &middot; &copy; 2026+ <a href="https://jbs-newmedia.com" target="_blank" rel="noopener noreferrer">JBS New Media GmbH</a> &middot; Juergen Schwind &middot; <a href="https://github.com/jbsnewmedia/vibe4dock" target="_blank" rel="noopener noreferrer">vibe4dock</a> &middot; MIT License',
     ],
     'de' => [
         'title' => 'Diff', 'repo' => 'Repository', 'branch' => 'Branch', 'detached' => 'detached',
@@ -53,7 +53,7 @@ $T = [
         'selectHint' => 'Zeilen anhaken, dann "Auswahl zurücksetzen" – geänderte Zeilen kehren zum Original zurück.',
         'error' => 'Fehler', 'ok' => 'OK', 'working' => 'Arbeitskopie', 'diffTo' => 'Diff',
         'lgMod' => 'geändert', 'lgAdd' => 'neu (staged)', 'lgDel' => 'gelöscht', 'lgRen' => 'umbenannt', 'lgUnt' => 'unversioniert',
-        'footer' => 'Part of <strong>Vibe4Dock</strong> &middot; &copy; 2026+ <a href="https://jbs-newmedia.com" target="_blank" rel="noopener noreferrer">JBS New Media GmbH</a> &middot; Juergen Schwind &middot; <a href="https://github.com/jbsnewmedia/vibe4dock" target="_blank" rel="noopener noreferrer">vibe4dock</a> &middot; MIT License',
+        'footer' => 'Part of <a href="https://github.com/jbsnewmedia/vibe4dock-arcvd" target="_blank" rel="noopener noreferrer"><strong>Vibe4Dock</strong></a> &middot; &copy; 2026+ <a href="https://jbs-newmedia.com" target="_blank" rel="noopener noreferrer">JBS New Media GmbH</a> &middot; Juergen Schwind &middot; <a href="https://github.com/jbsnewmedia/vibe4dock" target="_blank" rel="noopener noreferrer">vibe4dock</a> &middot; MIT License',
     ],
 ];
 

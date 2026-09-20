@@ -67,6 +67,8 @@ body::before {
 
 #brand svg { width: 48px; height: 48px; flex-shrink: 0; }
 #brand .brand-name { font-size: 1.8em; font-weight: bold; color: var(--text-white); letter-spacing: -0.5px; }
+#brand .brand-name a { color: inherit; text-decoration: none; }
+#brand .brand-name a:hover { text-decoration: underline; }
 
 #new-chat { width: 100%; }
 
