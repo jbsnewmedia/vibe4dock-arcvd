@@ -118,12 +118,12 @@ Two variants exist (built from the same Dockerfile via `BASE_IMAGE` build-arg):
 
 ```bash
 # production
-docker build -t jbsnewmedia/vibe4dock-arcvd:1.0.2 .
-docker run --rm -p 8080:80 -e OPENCODE_API_KEY=... jbsnewmedia/vibe4dock-arcvd:1.0.2
+docker build -t jbsnewmedia/vibe4dock-arcvd:1.0.3 .
+docker run --rm -p 8080:80 -e OPENCODE_API_KEY=... jbsnewmedia/vibe4dock-arcvd:1.0.3
 
 # dev variant
 docker build --build-arg BASE_IMAGE=webdevops/php-apache-dev:8.5 --build-arg VARIANT=dev \
-    -t jbsnewmedia/vibe4dock-arcvd:1.0.2-dev .
+    -t jbsnewmedia/vibe4dock-arcvd:1.0.3-dev .
 ```
 
 ## Release (Docker Hub)
@@ -135,9 +135,10 @@ The GitHub Actions workflow `.github/workflows/docker.yml` builds and pushes on 
 | push to `main` | `latest` | `latest-dev` |
 | `1.0.0` or `v1.0.0` | `1.0.0`, `1.0`, `latest` | `1.0.0-dev`, `1.0-dev`, `latest-dev` |
 | `1.0.1` or `v1.0.1` | `1.0.1`, `1.0`, `latest` | `1.0.1-dev`, `1.0-dev`, `latest-dev` |
-| `1.0.2` or `v1.0.2` (current patch release) | `1.0.2`, `1.0`, `latest` | `1.0.2-dev`, `1.0-dev`, `latest-dev` |
+| `1.0.2` or `v1.0.2` | `1.0.2`, `1.0`, `latest` | `1.0.2-dev`, `1.0-dev`, `latest-dev` |
+| `1.0.3` or `v1.0.3` (current patch release) | `1.0.3`, `1.0`, `latest` | `1.0.3-dev`, `1.0-dev`, `latest-dev` |
 
-Release notes per version live in `doc/rls/` (see `1.0.0.md`, `1.0.1.md`, `1.0.2.md`).
+Release notes per version live in `doc/rls/` (see `1.0.0.md`, `1.0.1.md`, `1.0.2.md`, `1.0.3.md`).
 
 One-time setup in repo settings -> *Secrets and variables* -> *Actions* -> *New repository secret*:
 
