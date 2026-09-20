@@ -277,6 +277,10 @@ pm.max_spare_servers = 3
 catch_workers_output = yes
 clear_env = no
 security.limit_extensions = .php
+php_admin_value[upload_max_filesize] = 100M
+php_admin_value[post_max_size] = 120M
+php_admin_value[max_execution_time] = 300
+php_admin_value[memory_limit] = 256M
 FPM
 
 # ----------------------------------------------------------------------------
@@ -432,6 +436,11 @@ cat > "$CONFIG_DIR/apache-routing.conf" <<ROUTING
 <Location /${P}-chat>
 ${CHAT_AUTH_BLOCK}
 </Location>
+# Upload endpoints -> PHP via FPM (writes into the project's incoming/ dir)
+ProxyPass /${P}-chat/api/upload !
+Alias /${P}-chat/api/upload/file /app/php/upload-api.php
+Alias /${P}-chat/api/upload/list /app/php/upload-api.php
+Alias /${P}-chat/api/upload /app/php/upload-api.php
 ProxyPass /${P}-chat/api/ http://127.0.0.1:4577/ retry=0
 Alias /${P}-chat/models.json /home/application/.local/state/opencode/model.json
 <Location /${P}-chat/models.json>
@@ -447,6 +456,11 @@ ${VERONICA_AUTH_BLOCK}
 </Location>
 ProxyPass /${P}-veronica/api/users !
 Alias /${P}-veronica/api/users /app/php/veronica-users-api.php
+# Upload endpoints -> PHP via FPM (writes into the project's incoming/ dir)
+ProxyPass /${P}-veronica/api/upload !
+Alias /${P}-veronica/api/upload/file /app/php/upload-api.php
+Alias /${P}-veronica/api/upload/list /app/php/upload-api.php
+Alias /${P}-veronica/api/upload /app/php/upload-api.php
 ProxyPass /${P}-veronica/api/ http://127.0.0.1:4578/ retry=0
 Alias /${P}-veronica/models.json /home/application/.local/state/opencode/model.json
 <Location /${P}-veronica/models.json>
@@ -570,6 +584,16 @@ chown -R application:application \
     /home/application/.local/share/opencode \
     /home/application/.local/state/opencode 2>/dev/null \
     || log "WARNING: opencode data dirs not writable by application user - settings/sessions may not persist"
+
+# ----------------------------------------------------------------------------
+# Chat/Veronica uploads land in the project's incoming/ dir so the agent can
+# reference them via @name. The project dir may be a bind mount owned by root -
+# hand the incoming dir to the application user (php-fpm) for uploads.
+# ----------------------------------------------------------------------------
+VIBE_INCOMING_DIR="${VIBE_INCOMING_DIR:-/app/project/incoming}"
+mkdir -p "$VIBE_INCOMING_DIR"
+chown application:application "$VIBE_INCOMING_DIR" 2>/dev/null \
+    || log "WARNING: $VIBE_INCOMING_DIR not chown-able - file uploads may fail"
 
 # ----------------------------------------------------------------------------
 # Hand over to supervisord

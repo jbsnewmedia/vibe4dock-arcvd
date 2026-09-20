@@ -99,7 +99,7 @@ The users live server-side in `${VERONICA_USERS_FILE}` (default `/data/veronica-
 ## Differences from the multi-container stack
 
 - No tools dashboard (`/vibe-dashboard`) and no addon management
-- The upload endpoints of the chat/veronica UIs (`/api/upload*`) are not available (they depended on the tools container)
+- The upload endpoints of the chat/veronica UIs (`/api/upload*`) are served by a local PHP script (`/app/php/upload-api.php`) and write into the project's `incoming/` directory (instead of the tools container)
 - Shells use HTTP basic auth instead of the form login (`vibe-auth` is not included)
 - The opencode backends themselves have no auth - they are protected by the basic auth in front of them
 
