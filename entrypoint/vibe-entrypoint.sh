@@ -176,6 +176,7 @@ gen_manifest() {
     "start_url": "./",
     "scope": "./",
     "display": "standalone",
+    "orientation": "portrait",
     "background_color": "${bg}",
     "theme_color": "${theme}",
     "icons": [
