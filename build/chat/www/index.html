@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<!--i18n: docTitle, newChatBtn, sidebarTitle, emptyState, workingText, qmTitle, closeTitle, attachTitle, promptPh, sendBtn, dropHtml -->
+<!--i18n: docTitle, newChatBtn, sidebarTitle, emptyState, workingText, qmTitle, closeTitle, attachTitle, attachFileOption, attachGalleryOption, promptPh, sendBtn, dropHtml -->
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -68,7 +68,9 @@
             <textarea id="prompt" rows="1" placeholder="Prompt &hellip;" data-i18n-placeholder="promptPh"></textarea>
             <button type="submit" id="send-btn" class="btn btn-primary" data-i18n="sendBtn">Send</button>
             <input type="file" id="file-input" multiple hidden>
+            <input type="file" id="file-input-gallery" accept="image/*,video/*" multiple hidden>
         </form>
+        <div id="attach-menu" hidden></div>
         <div id="at-popup" hidden></div>
         <div id="cmd-popup" hidden></div>
         <div id="drop-overlay" hidden>

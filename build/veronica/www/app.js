@@ -82,6 +82,8 @@
         stopBtn:           document.getElementById('stop-btn'),
         attachBtn:         document.getElementById('attach-btn'),
         fileInput:         document.getElementById('file-input'),
+        fileInputGallery:  document.getElementById('file-input-gallery'),
+        attachMenu:        document.getElementById('attach-menu'),
         sessionList:       document.getElementById('session-list'),
         sessionTitle:      document.getElementById('session-title'),
         chatActions:       document.getElementById('chat-actions'),
@@ -3101,13 +3103,64 @@
         });
 
         /* Attach & Upload */
-        el.attachBtn.addEventListener('click', function () {
-            el.fileInput.click();
+        function hideAttachMenu() {
+            if (el.attachMenu) { el.attachMenu.hidden = true; }
+            document.removeEventListener('click', onDocClick, true);
+        }
+        function onDocClick(e) {
+            if (el.attachBtn && el.attachBtn.contains(e.target)) { return; }
+            hideAttachMenu();
+        }
+        function showAttachMenu() {
+            if (!el.attachMenu) { return; }
+            el.attachMenu.innerHTML = '';
+            var opts = [
+                { icon: '\uD83D\uDCC4', label: t('attachFileOption'), input: el.fileInput },
+                { icon: '\uD83D\uDCF7', label: t('attachGalleryOption'), input: el.fileInputGallery }
+            ];
+            opts.forEach(function (o) {
+                if (!o.input) { return; }
+                var b = document.createElement('button');
+                b.type = 'button';
+                var ic = document.createElement('span');
+                ic.className = 'am-icon';
+                ic.textContent = o.icon;
+                var lb = document.createElement('span');
+                lb.textContent = o.label;
+                b.appendChild(ic);
+                b.appendChild(lb);
+                b.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    hideAttachMenu();
+                    o.input.click();
+                });
+                el.attachMenu.appendChild(b);
+            });
+            var r = el.attachBtn.getBoundingClientRect();
+            el.attachMenu.style.left = Math.max(8, r.left) + 'px';
+            el.attachMenu.style.bottom = (window.innerHeight - r.top + 8) + 'px';
+            el.attachMenu.hidden = false;
+            setTimeout(function () { document.addEventListener('click', onDocClick, true); }, 0);
+        }
+        el.attachBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+                if (el.attachMenu && !el.attachMenu.hidden) { hideAttachMenu(); } else { showAttachMenu(); }
+            } else {
+                hideAttachMenu();
+                el.fileInput.click();
+            }
         });
         el.fileInput.addEventListener('change', function () {
             uploadFiles(el.fileInput.files);
             el.fileInput.value = '';
         });
+        if (el.fileInputGallery) {
+            el.fileInputGallery.addEventListener('change', function () {
+                uploadFiles(el.fileInputGallery.files);
+                el.fileInputGallery.value = '';
+            });
+        }
 
         /* Mic / Recording */
         el.micBtn.addEventListener('click', startRecording);
