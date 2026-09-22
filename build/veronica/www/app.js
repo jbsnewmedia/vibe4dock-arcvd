@@ -17,12 +17,12 @@
     var SETTINGS_KEY  = 'vibe4dock.veronica.settings';    // { allowRegistration: true|false } (Admin-Override)
     var USER_KEY      = 'vibe4dock.veronica.user';        // sessionStorage: aktueller Alias
     var REMEMBER_KEY  = 'vibe4dock.veronica.remember';    // localStorage: {alias, pinHash, ts} - "Angemeldet bleiben"; PIN-Wechsel macht ihn ungueltig (Hash-Vergleich)
-    var LAST_KEY      = 'vibe4dock.veronica.last.';       // sessionStorage + alias: letzte Session
+    var LAST_KEY      = 'vibe4dock.veronica.last.';       // sessionStorage + alias: last session
     var SEEN_KEY      = 'vibe4dock.veronica.seen.';       // localStorage + alias: { sessionId: ts }
     var SESSIONS_KEY  = 'vibe4dock.veronica.sessions.';   // localStorage + alias (Mock-Modus)
     var MEMBERS_KEY   = 'vibe4dock.veronica.members.';    // localStorage + sessionId: [alias, …] (Gruppen)
     var MODEL_KEY     = 'vibe4dock.veronica.model';       // localStorage: "provider/model" (Modell-Auswahl)
-    var PLAN_KEY      = 'vibe4dock.veronica.planmode';    // localStorage: '1' = Plan-Modus aktiv
+    var PLAN_KEY      = 'vibe4dock.veronica.planmode';    // localStorage: '1' = plan mode active
     var UPLOADS_KEY   = 'vibe4dock.veronica.uploads.';    // localStorage + sessionId: [{name, size, key, ts}]
 
     var STUCK_POLLS = 40;
@@ -53,9 +53,9 @@
         lastMsgs: [],
         incomingCache: [],
         incomingLoaded: false,
-        queue: [],                  // Aufgaben-Scheduler: { text, ts }
-        qAnsweredCount: {},         // Chat-Fragen: pro Request beantwortete Fragen
-        qPendingAnswers: {},        // Chat-Fragen: gesammelte Antworten pro Request (bis letzter Frage)
+        queue: [],                  // task scheduler: { text, ts }
+        qAnsweredCount: {},         // chat questions: answered count per request
+        qPendingAnswers: {},        // chat questions: collected answers per request (until the last question)
     };
 
     /* ---------- Elements ---------- */
@@ -95,6 +95,7 @@
         chatDeleteBtn:     document.getElementById('chat-delete-btn'),
         chatRemoveBtn:     document.getElementById('chat-remove-btn'),
         modelMenuBtn:      document.getElementById('model-menu-btn'),
+        modelBadge:        document.getElementById('model-badge'),
         planModeBtn:       document.getElementById('plan-mode-btn'),
         modelMenu:         document.getElementById('model-menu'),
         chatModelItems:    document.getElementById('model-menu-items'),
@@ -267,7 +268,7 @@
         usersApiPut(users);
     }
 
-    /* Server-DB schreiben (Fire-and-Forget; localStorage bleibt Fallback) */
+    /* Write server DB (fire-and-forget; localStorage stays the fallback) */
     function usersApiPut(users) {
         try {
             fetch(API_BASE + '/users', {
@@ -280,8 +281,8 @@
         } catch (e) { /* Offline/Mock: localStorage genuegt */ }
     }
 
-    /* Server-DB laden (einmalig beim Start). Migriert lokale Bestaende in
-       eine leere Server-DB; faellt offline auf den localStorage zurueck. */
+    /* Load the server DB (once at boot). Migrates local records into
+       an empty server DB; falls back to localStorage when offline. */
     function syncUsersFromServer() {
         return fetch(API_BASE + '/users', { cache: 'no-store' })
             .then(function (r) {
@@ -310,7 +311,7 @@
         storageSet(SETTINGS_KEY, JSON.stringify(s));
     }
 
-    /* Registrierung: Admin-Override hat Vorrang vor der ENV-/Config-Einstellung */
+    /* Registration: the admin override wins over the ENV/config setting */
     function registrationAllowed() {
         var s = loadSettings();
         if (s && typeof s.allowRegistration === 'boolean') return s.allowRegistration;
@@ -325,7 +326,7 @@
         return !!(users[alias] && users[alias].admin);
     }
 
-    /* Erster User (bzw. aeltester Bestand ohne Admin) wird automatisch Admin */
+    /* First user (or oldest record without an admin) becomes admin automatically */
     function ensureAdminExists() {
         var users = loadUsers();
         var aliases = Object.keys(users);
@@ -502,7 +503,7 @@
         var s = loadSettings();
         s.allowRegistration = !!allowed;
         saveSettings(s);
-        /* Login-Screen sofort aktualisieren, falls sichtbar */
+        /* update the login screen immediately, if visible */
         if (!el.app.hidden) return;
         if (!allowed && loginMode === 'register') {
             setLoginMode('login');
@@ -573,7 +574,7 @@
         return /^[a-z0-9äöüß][a-z0-9äöüß_-]{0,2}$/.test(v);
     }
 
-    /* SHA-256 via WebCrypto (Secure Context), sonst FNV-artiger Fallback */
+    /* SHA-256 via WebCrypto (secure context), otherwise FNV-style fallback */
     function hashPin(alias, pin) {
         var str = 'veronica:' + alias + ':' + pin;
         if (window.crypto && window.crypto.subtle && window.TextEncoder &&
@@ -593,7 +594,7 @@
         return Promise.resolve('fnv:' + fnvHash(str));
     }
     function fnvHash(s) {
-        /* cyrb53-artiger Hash – Demo-Fallback ohne WebCrypto */
+        /* cyrb53-style hash - demo fallback without WebCrypto */
         var h1 = 0xdeadbeef ^ s.length, h2 = 0x41c6ce57 ^ s.length;
         for (var i = 0; i < s.length; i++) {
             var ch = s.charCodeAt(i);
@@ -689,10 +690,10 @@
         });
     }
 
-    /* Gemerkter Login ("Angemeldet bleiben"): nur gueltig, solange der
-       gespeicherte PIN-Hash zum aktuellen User-Record passt. Nach einer
-       PIN-Aenderung (Admin/Selbst) verweigert der Vergleich den Auto-Login
-       und der gemerkte Eintrag wird verworfen. */
+    /* Remembered login ("remember me"): only valid as long as the
+       stored PIN hash matches the current user record. After a PIN
+       change (admin/self) the comparison rejects the auto-login
+       and the remembered record is discarded. */
     function loadRemembered(users) {
         var raw = storageGet(REMEMBER_KEY);
         if (!raw) { return null; }
@@ -797,8 +798,8 @@
         return api('GET', '/session', null, 2500).then(function () {
             state.backend = 'api';
         }).catch(function () {
-            /* Nach Container-Restarts braucht opencode kurz – retry statt
-               dauerhaft in den Mock-Modus zu fallen */
+            /* After container restarts opencode needs a moment - retry instead
+               of falling back to mock mode permanently */
             if ((attempt || 0) < 3) {
                 return new Promise(function (r) { setTimeout(r, 1000); })
                     .then(function () { return detectBackend((attempt || 0) + 1); });
@@ -823,22 +824,22 @@
         return String(raw && raw.title || '').indexOf(tagPrefix() + ' ') === 0;
     }
 
-    /* Gruppen: Session ist sichtbar, wenn der eigene Alias irgendwo im Titel
-       getaggt ist (Eigentuemer hat ihn am Anfang, hinzugefuegte Mitglieder
-       bekommen ihr Tag beim Hinzufuegen angehaengt) */
+    /* Groups: a session is visible when the own alias is tagged
+       somewhere in its title (the owner has it at the start, added
+       members get their tag appended when added) */
     function isMemberOfSession(raw) {
         var me = state.user ? state.user.alias : '';
         return !!me && String(raw && raw.title || '').indexOf('[' + me + ']') !== -1;
     }
 
-    /* Titel ohne alle [alias]-Tags (die Avatare zeigen die Mitglieder) */
+    /* Title without all [alias] tags (the avatars show the members) */
     function displayTitle(raw) {
         var t = String(raw == null ? '' : raw).replace(/\s*\[[a-z0-9äöüß_-]{1,3}\]/g, ' ');
         t = t.replace(/\s+/g, ' ').trim();
         return t || I18N.t('sessionNew');
     }
 
-    /* Mitglieder direkt aus den Titel-Tags lesen (eigener Alias wird weggelassen) */
+    /* Read members directly from the title tags (own alias is omitted) */
     function membersFromTitle(raw) {
         var me = state.user ? state.user.alias : '';
         var tags = String(raw == null ? '' : raw).match(/\[([a-z0-9äöüß_-]{1,3})\]/g) || [];
@@ -895,7 +896,7 @@
         };
     }
 
-    /* Tombstones: frisch gelöschte Sessions blenden stale Poll-Antworten aus */
+    /* Tombstones: freshly deleted sessions hide stale poll replies */
     var deletedSessionTombstones = [];
     function markSessionDeleted(id) {
         deletedSessionTombstones.push({ id: id, until: Date.now() + 10000 });
@@ -989,7 +990,7 @@
         }
     }
 
-    /* ---------- Chat-Aktionen (Export/Löschen) ---------- */
+    /* ---------- chat actions (export/delete) ---------- */
     function toggleChatMenu(force) {
         if (!el.chatMenu) return;
         var show = typeof force === 'boolean' ? force : el.chatMenu.hidden;
@@ -1087,7 +1088,7 @@
         });
     }
 
-    /* Chat-Ersteller = erster Titel-Tag; er kann nicht entfernt werden */
+    /* Chat creator = first title tag; it cannot be removed */
     function sessionOwnerAlias(s) {
         var m = String(s && s.raw && s.raw.title || '').match(/^\[([a-z0-9äöüß_-]{1,3})\]/);
         return m ? m[1] : '';
@@ -1126,8 +1127,8 @@
         var members = getSessionMembers(s).filter(function (a) { return a !== alias; });
         storageSet(MEMBERS_KEY + s.id, JSON.stringify(members));
         if (s.members) { s.members = members; }
-        /* [alias]-Tag aus dem Titel entfernen (api-Modus) – damit sieht der
-           entfernte User den Chat in seiner Liste nicht mehr */
+        /* Remove the [alias] tag from the title (api mode) - so the
+           removed user no longer sees the chat in their list */
         if (state.backend === 'api' && s.raw && s.raw.title &&
             s.raw.title.indexOf('[' + alias + ']') !== -1) {
             var nt = s.raw.title.replace(' [' + alias + ']', '');
@@ -1197,7 +1198,7 @@
                 bubble.appendChild(buildVoiceBubble(p.duration));
                 hasContent = true;
             }
-            /* reasoning / tool / subtask → bewusst NICHT rendern */
+            /* reasoning / tool / subtask -> intentionally NOT rendered */
         }
 
         if (!hasContent) return null; // laufende Assistant-Antwort → "Veronica schreibt…"
@@ -1277,7 +1278,7 @@
         return wrap;
     }
 
-    /* Anti-Flicker: Signatur nur ueber SICHTBAREN Inhalt (nicht Metadaten) */
+    /* Anti-flicker: signature over VISIBLE content only (no metadata) */
     var renderedMsgKeys = {};
     function resetRenderedMsgKeys() { renderedMsgKeys = {}; }
     function visibleSig(msgs) {
@@ -1291,11 +1292,11 @@
         return parts.join('|');
     }
 
-    /* Inkrementelles Rendern: nur neue Nachrichten anhaengen, laufende
-       (Streaming-)Schlussnachricht ersetzen, Full-Rebuild nur bei
-       Strukturwechsel - verhindert das Flackern beim Refresh. */
-    var renderedSeq = [];   /* geordnete Keys der gerenderten Nachrichten */
-    var renderedSigs = [];  /* Inhalts-Signatur je gerenderter Nachricht */
+    /* Incremental rendering: append only new messages, replace the
+       running (streaming) tail message, full rebuild only on
+       structural changes - prevents the refresh flicker. */
+    var renderedSeq = [];   /* ordered keys of the rendered messages */
+    var renderedSigs = [];  /* content signature per rendered message */
     var renderedNodes = []; /* gerenderte {node, post} Paare */
     var lastDateKey = null;
     var lastRole = null;
@@ -1319,7 +1320,7 @@
             lastRole = null;
         }
         var node = renderMessage(m);
-        if (!node) { return; } /* noch kein sichtbarer Text */
+        if (!node) { return; } /* no visible text yet */
         var role = info.role;
         if (lastRole === role) { node.classList.add('grouped'); }
         var key = keyOf(m);
@@ -1329,8 +1330,8 @@
         }
         lastRole = role;
         el.messages.appendChild(node);
-        /* Upload-Post unter dieser Nachricht: genau die Dateien, die sie per @ erwaehnt
-           (nachrichtenText statt DOM-Text: die Meta-Zeit klebt sonst am Dateinamen) */
+        /* Upload post below this message: exactly the files it mentions via @
+           (message text instead of DOM text: the meta time would glue to the file name) */
         var mentioned = mentionFilesInText(msgPartsText(m));
         var post = mentioned.length ? buildUploadPostBubble(mentioned, false) : null;
         if (post) { el.messages.appendChild(post); }
@@ -1379,11 +1380,11 @@
                 list.forEach(appendMessageNode);
             }
         } else if (sameAsRendered(newKeys, list)) {
-            /* nichts Neues: kein Rebuild (Anti-Flicker), Rest-Pflege unten */
+            /* nothing new: no rebuild (anti-flicker), tail care below */
         } else if (common < newKeys.length) {
             list.slice(common).forEach(appendMessageNode);
         } else if (tailReplaced || msgContentSig(list[list.length - 1]) !== renderedSigs[renderedSigs.length - 1]) {
-            /* Streaming: letzte Nachricht ersetzen */
+            /* streaming: replace the last message */
             var tail = renderedNodes[renderedNodes.length - 1];
             if (tail && tail.node.parentNode) { tail.node.parentNode.removeChild(tail.node); }
             if (tail && tail.post && tail.post.parentNode) { tail.post.parentNode.removeChild(tail.post); }
@@ -1417,7 +1418,7 @@
     }
 
     function appendMessage(role, text, opts) {
-        /* nur Mock-Modus: lokal speichern + rendern */
+        /* mock mode only: store locally + render */
         opts = opts || {};
         var s = getCurrentSession();
         if (!s) return null;
@@ -1466,7 +1467,7 @@
     }
 
     function updateSessionTitle() {
-        /* Topbar zeigt konstant den Kontakt "Veronica" (WhatsApp-Stil) */
+        /* topbar constantly shows the "Veronica" contact (WhatsApp style) */
         el.sessionTitle.textContent = BOT_NAME;
     }
 
@@ -1530,7 +1531,7 @@
         if (!state.queue.length || state.generating) return;
         var next = state.queue.shift();
         renderQueuedMessages(false);
-        /* Versand → die echte Nachricht bekommt automatisch die 2 Haken */
+        /* send -> the real message automatically gets the 2 ticks */
         setTimeout(function () { dispatchMessage(next.text); }, 250);
     }
 
@@ -1555,8 +1556,8 @@
         if (members.indexOf(alias) !== -1) return;
         members.push(alias);
         storageSet(MEMBERS_KEY + s.id, JSON.stringify(members));
-        /* Gruppe teilen: [alias] an den Session-Titel haengen, damit der
-           neue Member den Chat in seiner Liste sieht (alle Clients) */
+        /* Share group: append [alias] to the session title so the
+           new member sees the chat in their list (all clients) */
         if (state.backend === 'api' && s.raw && s.raw.title &&
             s.raw.title.indexOf('[' + alias + ']') === -1) {
             var nt = s.raw.title + ' [' + alias + ']';
@@ -1828,13 +1829,13 @@
                 var isLast = nextIdx >= (cur.req.questions || []).length;
                 if (!cur.req.recovered) appendAnswerEcho(echoTextFor(vals));
                 if (!isLast) {
-                    /* Frage für Frage: nächste Frage desselben Requests zeigen */
+                    /* question by question: show the next question of the same request */
                     state.qAnsweredCount[reqId] = nextIdx;
                     lastInlineQSig = null;
                     renderInlineQuestions(true);
                     return;
                 }
-                /* letzte Frage des Requests → gebündelt senden (2 Haken) */
+                /* last question of the request -> send bundled (2 ticks) */
                 state.qAnsweredCount[reqId] = nextIdx;
                 lastInlineQSig = null;
                 var payload = state.qPendingAnswers[reqId] || [];
@@ -1871,7 +1872,7 @@
                     if (v) {
                         submit([v]);
                     } else if (opts.length) {
-                        /* Optionale Antwort leer -> Frage ohne Angabe ueberspringen */
+                        /* optional answer empty -> skip the question without an answer */
                         submit([]);
                     }
                 }
@@ -1931,7 +1932,7 @@
         if (sig === state.lastPendingSig) { return; }
         state.lastPendingSig = sig;
 
-        /* Fragen wandern in den Chat (Frage für Frage), Modal nur für Freigaben */
+        /* questions move into the chat (question by question), modal only for permissions */
         var body = el.questionModalBody;
         body.innerHTML = '';
         var permCount = (state.pendingPermissions || []).length;
@@ -1971,7 +1972,7 @@
         renderInlineQuestions(false);
     }
 
-    /* ---------- PLAN-MODUS ---------- */
+    /* ---------- PLAN MODE ---------- */
     function renderPlanToggle() {
         if (!el.planModeBtn) return;
         el.planModeBtn.classList.toggle('active', state.planMode);
@@ -1988,7 +1989,7 @@
         var wasOn = state.planMode;
         setPlan(!wasOn);
         appendNotice(!wasOn ? t('planOn') : t('planOff'));
-        /* GO: beim Deaktivieren startet die Umsetzung (Standard-Agent) */
+        /* GO: disabling starts the implementation (default agent) */
         if (wasOn) {
             sendPlanGo();
         }
@@ -2137,7 +2138,7 @@
         });
         state.generating = gen;
         if (wasGenerating && !gen) {
-            /* Veronica fertig → nächste Aufgabe aus der Warteschlange (2 Haken) */
+            /* Veronica done -> next task from the queue (2 ticks) */
             setTimeout(processQueue, 400);
         }
     }
@@ -2183,7 +2184,7 @@
     /* ============================================================
        COMPOSER & SENDEN
        ============================================================ */
-    /* Sprachnachricht deaktiviert (Feature bleibt erhalten, Flipp-Flag) */
+    /* voice message disabled (feature kept, flip flag) */
     var VOICE_ENABLED = false;
     function updateComposerState() {
         var hasText = el.prompt.value.trim().length > 0;
@@ -2194,7 +2195,7 @@
             el.attachBtn.disabled = true;
             el.prompt.disabled = true;
         } else {
-            /* Scheduler: Tippen + Senden auch während Veronica schreibt */
+            /* scheduler: typing + sending also while Veronica writes */
             el.micBtn.hidden = !VOICE_ENABLED || hasText;
             el.sendBtn.hidden = !hasText;
             el.stopBtn.hidden = !state.generating || hasText;
@@ -2222,8 +2223,8 @@
         return null;
     }
 
-    /* ---------- Modell-Auswahl (Chat-Menü, Quelle: opencode /config/providers
-       + model.json) ---------- */
+    /* ---------- model selection (chat menu, sources: opencode /config/providers
+       + models.json) ---------- */
     var modelGroups = [];
     var modelMenuLoading = false;
 
@@ -2236,10 +2237,33 @@
         return (modelGroups[0] && modelGroups[0].keys[0]) ? modelGroups[0].keys[0].key : '';
     }
 
+    function activeModelLabel() {
+        var active = activeModelKey();
+        for (var g = 0; g < modelGroups.length; g++) {
+            for (var i = 0; i < modelGroups[g].keys.length; i++) {
+                if (modelGroups[g].keys[i].key === active) { return modelGroups[g].keys[i].label; }
+            }
+        }
+        if (active) {
+            var i2 = active.indexOf('/');
+            return i2 > 0 ? active.slice(i2 + 1) : active;
+        }
+        return '';
+    }
+
+    function updateModelBadge() {
+        if (!el.modelBadge) { return; }
+        var label = activeModelLabel();
+        el.modelBadge.textContent = label;
+        el.modelBadge.hidden = !label;
+        el.modelMenuBtn.title = label ? t('modelTitle') + ': ' + label : t('modelTitle');
+    }
+
     function renderModelMenu() {
         if (!el.chatModelItems) return;
         el.chatModelItems.innerHTML = '';
         var active = activeModelKey();
+        updateModelBadge();
         var groups = modelGroups;
         if (!groups.length) {
             var info = document.createElement('div');
@@ -2272,7 +2296,7 @@
                 b.addEventListener('click', function (e) {
                     e.stopPropagation();
                     storageSet(MODEL_KEY, m.key);
-                    /* Menue bleibt offen - die fett-Markierung springt direkt */
+                    /* menu stays open - the bold marker jumps right away */
                     renderModelMenu();
                 });
                 el.chatModelItems.appendChild(b);
@@ -2305,7 +2329,21 @@
             var stateKeys = function (list) {
                 return (Array.isArray(list) ? list : [])
                     .map(function (x) { return x && x.providerID && x.modelID ? x.providerID + '/' + x.modelID : null; })
-                    .filter(function (k, i, a) { return k && known[k] && a.indexOf(k) === i; });
+                    .filter(function (k, i, a) { return k && a.indexOf(k) === i; });
+            };
+            /* favorites/recent from providers that /config/providers does not
+               (yet) list must not disappear: synthesize the entry. */
+            var toEntry = function (k) {
+                if (known[k]) { return known[k]; }
+                var i = k.indexOf('/');
+                return {
+                    key: k,
+                    label: i > 0 ? k.slice(i + 1) : k,
+                    prov: i > 0 ? k.slice(0, i) : 'opencode',
+                    def: false,
+                    zen: false,
+                    ghost: true
+                };
             };
             return fetch(location.origin + BASE + 'models.json', { cache: 'no-store' })
                 .then(function (r) { return r.ok ? r.json() : null; })
@@ -2315,9 +2353,9 @@
                     var rec = stateKeys(local && local.recent);
                     var groups = [];
                     if (fav.length) {
-                        groups.push({ label: t('modelsFav'), keys: fav.map(function (k) { return known[k]; }) });
+                        groups.push({ label: t('modelsFav'), keys: fav.map(toEntry) });
                     } else if (rec.length) {
-                        groups.push({ label: t('modelsRecent'), keys: rec.map(function (k) { return known[k]; }) });
+                        groups.push({ label: t('modelsRecent'), keys: rec.map(toEntry) });
                     } else {
                         var zen = Object.keys(known).filter(function (k) { return known[k].zen; });
                         groups.push({ label: zen.length ? t('modelsRec') : t('modelsAll'), keys: zen.length ? zen.map(function (k) { return known[k]; }) : Object.keys(known).map(function (k) { return known[k]; }) });
@@ -2326,7 +2364,7 @@
                     renderModelMenu();
                 });
         }).catch(function () {
-            /* kalter opencode-Start: providers-Call kann (noch) leer/fehlerhaft sein */
+            /* cold opencode start: the providers call can still be empty/broken */
             if (tryN < 2) {
                 modelMenuLoading = false;
                 return new Promise(function (r) { setTimeout(r, 2500); }).then(function () { loadModelsForMenu(tryN + 1); });
@@ -2374,7 +2412,7 @@
             }
             return;
         }
-        /* API: Verlauf leeren = neuen Chat starten */
+        /* API: clear history = start a new chat */
         newChat();
         appendNotice(t('noticeNew'));
     }
@@ -2414,7 +2452,7 @@
             renderSessionList();
             scrollToBottom(true);
         } else {
-            /* API-Modus: Hilfe als Systemnotiz ohne Prompt */
+            /* API mode: help as a system notice without a prompt */
             appendNotice(t('noticeCmds'));
         }
     }
@@ -2454,7 +2492,7 @@
         text = (text || '').trim();
         if (!text || !state.user) { return; }
         if (state.generating) {
-            /* Scheduler: während Veronica schreibt wird eingereiht (1 Haken) */
+            /* scheduler: queued while Veronica writes (1 tick) */
             queueMessage(text);
             return;
         }
@@ -2492,8 +2530,8 @@
                     body.modelID = pref.modelID;
                 }
                 if (state.planMode) {
-                    /* Planmodus intern: Veronicas eigene Persona mit
-                       deaktivierten Datei-Tools (statt generischem plan-Agent) */
+                    /* plan mode internally: Veronica's own persona with
+                       disabled file tools (instead of the generic plan agent) */
                     body.agent = 'veronica-plan';
                 } else if (window.CHAT_CONFIG && window.CHAT_CONFIG.agent) {
                     body.agent = window.CHAT_CONFIG.agent;
@@ -2567,7 +2605,7 @@
         });
     }
 
-    /* ---------- Upload: WhatsApp-Style Karten, gruppiert nach Typ ---------- */
+    /* ---------- upload: WhatsApp-style cards, grouped by type ---------- */
     var UPLOAD_TYPE_ORDER = ['image', 'video', 'audio', 'pdf', 'doc', 'sheet', 'archive', 'other'];
     function uploadTypeLabel(key) {
         var map = { image: 'typeImage', video: 'typeVideo', audio: 'typeAudio', pdf: 'typePdf',
@@ -2659,7 +2697,7 @@
         if (!list.length) { return; }
         var uploaded = [];
 
-        /* nach Dateityp gruppieren */
+        /* group by file type */
         var buckets = {};
         list.forEach(function (f) {
             var meta = fileTypeMeta(f.name);
@@ -2720,7 +2758,7 @@
         })(0);
     }
 
-    /* ---------- Hochgeladene Dateien als Chat-Nachrichten (nach Typ gruppiert) ---------- */
+    /* ---------- uploaded files as chat messages (grouped by type) ---------- */
     function getSessionUploads() {
         var sid = state.sessionId;
         if (!sid) return [];
@@ -2760,10 +2798,10 @@
     function sanitizeFileId(name) {
         return String(name).replace(/[^A-Za-z0-9]/g, '_');
     }
-    /* Upload-Post-Logik: jede Nachricht, die eine Session-Datei per @name
-       (gesendet als @incoming/<name>) erwaehnt, bekommt direkt DARUNTER einen
-       eigenen Post mit genau den Dateien dieser Nachricht. Der globale Post am
-       Chat-Ende haelt nur noch Uploads, die in keiner Nachricht erwaehnt sind. */
+    /* Upload post logic: every message that mentions a session file via @name
+       (sent as @incoming/<name>) gets its own post directly BELOW it
+       with exactly the files of that message. The global post at the
+       chat end only holds uploads not mentioned in any message. */
     function uploadNameMap() {
         var names = {};
         getSessionUploads().forEach(function (u) {
@@ -2851,14 +2889,14 @@
         return host;
     }
     function renderUploadGroups(scroll) {
-        /* Entfernt: Uploads zeigen keinen Chat-Post mehr, bevor die Nachricht
-           mit der @-Erwaehnung tatsaechlich gesendet wurde. Der Datei-Post
-           entsteht ausschliesslich unter dem abgesendeten Post. */
+        /* Removed: uploads no longer show a chat post before the message
+           with the @ mention has actually been sent. The file post
+           appears exclusively below the sent post. */
         var host = document.getElementById('upload-groups');
         if (host && host.parentNode) { host.parentNode.removeChild(host); }
     }
 
-    /* ---------- @-Erwaehnungen in Nachrichten -> Link auf den Upload-Post ---------- */
+    /* ---------- @ mentions in messages -> link to the upload post ---------- */
     function linkifyMentions(bubble) {
         var uploads = getSessionUploads();
         if (!uploads.length) { return; }
@@ -3095,8 +3133,8 @@
             closeSidebar();
         }
     }
-    /* Viewport-Wechsel (mobile <-> desktop): Sidebar auf sinnvollen
-       Default setzen, manuelle Toggles innerhalb eines Modus bleiben */
+    /* viewport change (mobile <-> desktop): set the sidebar to a sensible
+       default, manual toggles within a mode are preserved */
     var lastViewportMode = null;
     function syncViewportSidebar() {
         var mode = window.innerWidth < 760 ? 'mobile' : 'desktop';
@@ -3158,10 +3196,10 @@
         el.loginPin.addEventListener('input', hideLoginError);
         el.loginPin2.addEventListener('input', hideLoginError);
 
-        /* PLAN-MODUS Toggle */
+        /* plan mode toggle */
         if (el.planModeBtn) el.planModeBtn.addEventListener('click', togglePlanMode);
 
-        /* @-Erwaehnungen -> Sprung zum Upload-Post unter dieser Nachricht (kurz wackeln) */
+        /* @ mentions -> jump to the upload post below this message (short shake) */
         el.messages.addEventListener('click', function (e) {
             var a = e.target && e.target.closest ? e.target.closest('a.file-mention') : null;
             if (!a) { return; }
@@ -3172,12 +3210,12 @@
         /* Logout */
         el.logout.addEventListener('click', logout);
 
-        /* Sidebar-Menü-Toggler (Topbar) */
+        /* sidebar menu toggle (topbar) */
         el.toggleSidebar.addEventListener('click', toggleSidebar);
         if (el.sidebarCollapse) el.sidebarCollapse.addEventListener('click', closeSidebar);
         if (el.toggleSidebarRight) el.toggleSidebarRight.addEventListener('click', openSidebar);
 
-        /* Chat-Aktionen (Mitglied/Export/Löschen) */
+        /* chat actions (member/export/delete) */
         if (el.chatAddBtn) el.chatAddBtn.addEventListener('click', openAddMember);
         if (el.chatRemoveBtn) el.chatRemoveBtn.addEventListener('click', openRemoveMember);
         if (el.chatMenuBtn) {
@@ -3208,7 +3246,7 @@
             if (dialogResolve && e.key === 'Enter' && document.activeElement !== el.appDialogInput) settleDialog(true);
         });
 
-        /* Admin: Nutzerverwaltung */
+        /* admin: user management */
         if (el.adminUsersBtn) el.adminUsersBtn.addEventListener('click', adminOpen);
         if (el.adminModalClose) el.adminModalClose.addEventListener('click', adminClose);
         if (el.adminModal) {
@@ -3427,7 +3465,7 @@
             setTimeout(syncViewportSidebar, 100);
         });
 
-        /* Click außerhalb schließt Popups */
+        /* click outside closes popups */
         document.addEventListener('click', function (e) {
             if (!el.atPopup.hidden && !el.atPopup.contains(e.target) && e.target !== el.prompt) {
                 el.atPopup.hidden = true;
@@ -3443,7 +3481,7 @@
             }
         });
 
-        /* ESC schließt Sidebar (mobile) */
+        /* ESC closes the sidebar (mobile) */
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && !el.sidebar.classList.contains('hidden') && window.innerWidth < 760) {
                 closeSidebar();
@@ -3471,7 +3509,7 @@
         return api('GET', '/command').then(function (list) {
             var real = (list || []).filter(function (c) { return c && c.name; });
             real.forEach(function (c) { c._real = true; });
-            /* lokale Commands + echte mischen (lokale gewinnen) */
+            /* mix local commands + real ones (local wins) */
             var names = state.commands.map(function (c) { return c.name; });
             real.forEach(function (c) {
                 if (names.indexOf(c.name) === -1) state.commands.push(c);
@@ -3493,11 +3531,12 @@
             if (state.backend === 'api') {
                 loadCommandsApi();
                 loadIncomingApi();
+                loadModelsForMenu();   /* Modell-Badge oben schon beim Boot fuellen */
             } else {
                 loadIncomingMock();
             }
             loadSessions().then(function () {
-                /* letzte Session wiederherstellen, sonst erste, sonst Empty-State */
+                /* restore the last session, else the first, else the empty state */
                 var last = sessionGet(LAST_KEY + state.user.alias);
                 var pick = null;
                 if (last && findSession(last)) { pick = last; }
@@ -3519,7 +3558,7 @@
     }
 
     function init() {
-        /* Erst die Server-DB laden, dann Boot fortfuehren */
+        /* load the server DB first, then continue booting */
         syncUsersFromServer().then(function () {
             attachEvents();
             renderPlanToggle();
@@ -3531,7 +3570,7 @@
                 bootApp();
                 return;
             }
-            /* "Angemeldet bleiben": Auto-Login nur bei unveraenderter PIN */
+            /* "remember me": auto-login only with an unchanged PIN */
             var remembered = loadRemembered(users);
             if (remembered) {
                 state.user = { alias: remembered.alias, admin: !!(users[remembered.alias] && users[remembered.alias].admin) };
@@ -3546,7 +3585,7 @@
         });
     }
 
-    /* Re-Render aller dynamischen Texte nach Sprachwechsel */
+    /* re-render all dynamic texts after a language switch */
     function rerenderI18n() {
         state.commands = state.commands.map(function (c) {
             if (c.name === 'new') c.description = t('cmdNew');
@@ -3568,7 +3607,7 @@
 
     document.addEventListener('i18n:change', rerenderI18n);
 
-    /* Polling nur im API-Modus */
+    /* polling only in API mode */
     setInterval(function () {
         if (state.user && state.backend === 'api' && !document.hidden) {
             refresh();

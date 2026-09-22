@@ -63,16 +63,16 @@ General rule: **auth is only active when BOTH username and password are set.**
 Shared: `OPENCODE_API_KEY`, `OPENCODE_PROVIDER`, `OPENCODE_MODEL`, `OPENCODE_AGENT`.
 Per-service overrides: `CHAT_OPENCODE_*` or `VERONICA_OPENCODE_*` (API_KEY, PROVIDER, MODEL, AGENT).
 
-### Project repo & web root (/app, neun.app pattern)
+### Project repo & web root (/app, fixed `./project` convention)
 
-The project repo lives at **`/app`** (compose pattern `./:/app`) - exactly like a plain PHP project:
+The project repo lives at **`/app`** (compose pattern `./project:/app`) - exactly like a plain PHP project:
 
 - The **opencode agents (chat + veronica) work in `/app`** - their files survive container rebuilds because the repo is a bind mount
 - If the repo has a **`public/` directory, it is served as the web root at `/`** (the app becomes the main page)
 - Without a project - or without `public/` - the **Vibe4Dock start page** is served; it stays reachable at **`/{VIBE_PREFIX}-start`** either way
 - Classic variant still works: repo at `/app/project` (`- ./project:/app/project`)
 
-Detection order for the project dir (`VIBE_PROJECT_DIR` overrides it): `/app` when it looks like a repo (composer.json / .git / package.json / public/), otherwise `/app/project` when present. Defaults derived from it: web root `$PROJECT/public`, Vibe-Diff repo `$PROJECT`, upload dir `$PROJECT/incoming`.
+Instance layout: a fixed `./project` folder next to the compose file holds the repo (`- ./project:/app`). Detection order for the project dir (`VIBE_PROJECT_DIR` overrides it): `/app` when it looks like a repo (composer.json / .git / package.json / public/), otherwise `/app/project` when present. Defaults derived from it: web root `$PROJECT/public`, Vibe-Diff repo `$PROJECT`, upload dir `$PROJECT/incoming`.
 
 ### File uploads (Chat + Veronica)
 
@@ -91,7 +91,7 @@ Browser UI for the git repo behind the code: current branch, branch list (with c
       DIFF_USERNAME: diff
       DIFF_PASSWORD: change-me
     volumes:
-      - ./:/app
+      - ./project:/app
 ```
 
 ### Veronica
@@ -101,6 +101,21 @@ Browser UI for the git repo behind the code: current branch, branch list (with c
 - `VERONICA_BOOTSTRAP_ADMIN` + `VERONICA_BOOTSTRAP_ADMIN_PIN_HASH` - admin seed, **only on first start** (when the JSON DB does not exist yet)
 - `VERONICA_BOOTSTRAP_USERS` - optional extra users `"alias:sha256:...,alias:sha256:..."`
 - The Veronica UI hashes PINs salted: `sha256` of `veronica:<alias>:<pin>`. **Raw PINs in the env seeds are accepted and salted automatically** (recommended). To pre-compute: `printf 'veronica:adm:1234' | sha256sum` -> `sha256:...` (replace alias/pin accordingly)
+
+### Veronica persona (multi-file, extensible)
+
+Veronica runs on a generated opencode persona, assembled from **multiple rule files** at container start:
+
+```
+<opencode-config>/persona/veronica/*.md        # shared rules (identity, style)
+<opencode-config>/persona/veronica-plan/*.md   # identity + plan-mode restrictions
+```
+
+- Files are applied in filename order (`10-identity.md`, `20-style.md`, ...) - add your own `30-*.md` files to extend the persona
+- The files live in the (usually bind-mounted) opencode config directory - edit or add them on the host, then restart the container to reassemble
+- Generated agents: `<opencode-config>/agent/veronica.md` + `agent/veronica-plan.md` (**generated - do not edit**, overwritten at start). The plan variant carries `tools: {write,edit,patch: false}` so file changes are blocked at runtime
+- Both agents are hidden (`hidden: true`) - they never appear in the chat agent picker
+- Mount your own folder to take full control: `./veronica-persona:/home/application/.config/opencode/persona/veronica`
 
 ### Veronica user database (JSON, not public)
 

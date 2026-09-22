@@ -61,9 +61,9 @@ write_htpasswd() {
     return 1
 }
 
-# models.json liegt unter /home/... (Directory-Deny-Default). Ohne eigene
-# Require-Zeile in der Location gilt das Deny -> 403. Daher: mit Service-Auth
-# schuetzen, ohne Service-Auth explizit freigeben.
+# models.json lives under /home/... (directory deny default). Without its
+# own Require line in the Location the Deny applies -> 403. Therefore:
+# protect with service auth, without service auth explicitly grant.
 CHAT_MODELS_AUTH="${CHAT_AUTH_BLOCK:-Require all granted}"
 VERONICA_MODELS_AUTH="${VERONICA_AUTH_BLOCK:-Require all granted}"
 
@@ -350,6 +350,10 @@ export OPENCODE_PROVIDER="${VERONICA_OPENCODE_PROVIDER:-${OPENCODE_PROVIDER:-}}"
 export OPENCODE_MODEL="${VERONICA_OPENCODE_MODEL:-${OPENCODE_MODEL:-}}"
 export OPENCODE_AGENT="${VERONICA_OPENCODE_AGENT:-${OPENCODE_AGENT:-}}"
 cd "${VIBE_PROJECT_DIR:-/app/project}"
+# Stagger the start: both opencode instances share the SQLite DB in
+# ~/.local/share/opencode - starting them at the same instant can crash
+# the second one with "database is locked" (supervisor then restarts it).
+sleep 3
 exec opencode serve --hostname 127.0.0.1 --port 4578 --print-logs --log-level INFO
 WRAP
 
@@ -620,48 +624,96 @@ chown -R application:application \
     || log "WARNING: opencode data dirs not writable by application user - settings/sessions may not persist"
 
 # ----------------------------------------------------------------------------
-# Veronica persona: hidden primary agents so Veronica keeps her identity in
-# normal and plan mode (instead of switching to opencode's generic plan agent).
-# The plan variant disables all file tools (write/edit/patch) at agent level.
+# Veronica persona: assembled from MULTI-FILE rule folders so the persona can
+# be extended flexibly (bind-mount or edit on the host, then restart):
+#   <opencode-config>/persona/veronica/*.md        - shared persona rules
+#   <opencode-config>/persona/veronica-plan/*.md   - identity + plan restrictions
+# The generated agent files (<opencode-config>/agent/*.md) are rebuilt from
+# these on every container start - do not edit them directly.
 # ----------------------------------------------------------------------------
 VIBE_OCODE_AGENT_DIR="/home/application/.config/opencode/agent"
-mkdir -p "$VIBE_OCODE_AGENT_DIR"
-cat > "$VIBE_OCODE_AGENT_DIR/veronica.md" <<'PERSONA'
----
-description: Veronica - Persona der Vibe4Dock-Assistentin (intern)
-mode: primary
-hidden: true
----
+VIBE_PERSONA_DIR="/home/application/.config/opencode/persona"
+mkdir -p "$VIBE_OCODE_AGENT_DIR" "$VIBE_PERSONA_DIR/veronica" "$VIBE_PERSONA_DIR/veronica-plan"
 
-Du bist Veronica, die Assistentin von Vibe4Dock von der JBS New Media GmbH mit Sitz in Worms.
+if [ ! -e "$VIBE_PERSONA_DIR/veronica/10-identity.md" ]; then
+cat > "$VIBE_PERSONA_DIR/veronica/10-identity.md" <<'PERSONA'
+You are Veronica, the assistant of Vibe4Dock by JBS New Media GmbH, based in Worms, Germany.
 
-- Wenn dich jemand auf Deutsch fragt, wer du bist, antwortest du genau so: "Ich bin Veronica von Vibe4Dock, dem Assistenten-System von der JBS New Media GmbH in Worms."
-- Wenn dich jemand auf Englisch fragt, wer du bist, antwortest du genau so: "I am Veronica from Vibe4Dock, the assistant system by JBS New Media GmbH in Worms."
-- In jeder anderen Sprache nutzt du die englische Variante.
-- Du bist freundlich, praezise und loesungsorientiert und antwortest in der Sprache der Frage (Deutsch oder Englisch).
-- Du arbeitest direkt im Projektverzeichnis der Nutzer:innen.
+- If someone asks in German who you are, answer exactly: "Ich bin Veronica von Vibe4Dock, dem Assistenten-System von der JBS New Media GmbH in Worms."
+- If someone asks in English who you are, answer exactly: "I am Veronica from Vibe4Dock, the assistant system by JBS New Media GmbH in Worms."
+- For any other language, use the English variant.
 PERSONA
-cat > "$VIBE_OCODE_AGENT_DIR/veronica-plan.md" <<'PERSONA'
----
-description: Veronica - Persona im Planmodus, nur Lesen und Planen (intern)
-mode: primary
-hidden: true
-tools:
+fi
+if [ ! -e "$VIBE_PERSONA_DIR/veronica/20-style.md" ]; then
+cat > "$VIBE_PERSONA_DIR/veronica/20-style.md" <<'PERSONA'
+- You are friendly, precise and solution-oriented, and you always reply in the language of the question (German or English).
+- You work directly in the users' project directory.
+PERSONA
+fi
+if [ ! -e "$VIBE_PERSONA_DIR/veronica-plan/10-identity.md" ]; then
+cat > "$VIBE_PERSONA_DIR/veronica-plan/10-identity.md" <<'PERSONA'
+You are Veronica, the assistant of Vibe4Dock by JBS New Media GmbH, based in Worms, Germany.
+
+- If someone asks in German who you are, answer exactly: "Ich bin Veronica von Vibe4Dock, dem Assistenten-System von der JBS New Media GmbH in Worms."
+- If someone asks in English who you are, answer exactly: "I am Veronica from Vibe4Dock, the assistant system by JBS New Media GmbH in Worms."
+- For any other language, use the English variant.
+PERSONA
+fi
+if [ ! -e "$VIBE_PERSONA_DIR/veronica-plan/20-plan-mode.md" ]; then
+cat > "$VIBE_PERSONA_DIR/veronica-plan/20-plan-mode.md" <<'PERSONA'
+- You are currently in PLAN MODE. In this mode you must NOT create, modify or delete any files - even if asked to.
+- This also applies to shell commands: never use redirections (>, >>), tee, cp, mv, rm, touch, mkdir, sed -i or any other command that writes - shell use in plan mode is strictly read-only.
+- In plan mode you only read and analyze: gather information, answer questions, and provide a concrete implementation plan in your reply.
+- Once plan mode is ended (you will notice that you are addressed without the plan-mode context), you work as usual again - then creating and modifying files is allowed again.
+PERSONA
+fi
+
+assemble_persona() {
+    local agent="$1" desc="$2" extra_yaml="$3"
+    local dir="$VIBE_PERSONA_DIR/$agent"
+    {
+        echo "---"
+        echo "# GENERATED by vibe-entrypoint.sh at container start - do not edit."
+        echo "# Extend the persona with files in persona/$agent/*.md instead, then restart."
+        echo "description: $desc"
+        echo "mode: primary"
+        echo "hidden: true"
+        if [ -n "$extra_yaml" ]; then
+            printf '%s\n' "$extra_yaml"
+        fi
+        echo "---"
+        echo
+        cat "$VIBE_PERSONA_DIR/$agent"/*.md 2>/dev/null
+    } > "$VIBE_OCODE_AGENT_DIR/$agent.md"
+}
+
+if [ ! -e "$VIBE_PERSONA_DIR/veronica/30-project.md" ]; then
+cat > "$VIBE_PERSONA_DIR/veronica/30-project.md" <<'PERSONA'
+- The project scaffold is already fully prepared: the folder structure, configuration and infrastructure exist and are wired up and working. There is nothing to set up or rebuild - do not recreate the existing structure.
+- Your main focus is the CONTENT: the web root `public/` in the project directory is what gets served.
+- The whole project directory is your working area: fetch packages with composer, extend src/, adjust config - whatever the task requires. Work in the existing structure instead of replacing it, and do not touch the docker setup unless the user explicitly asks for it.
+- Content must be self-contained: bundle fonts, styles and assets locally inside `public/` (no external CDN dependencies such as Google Fonts).
+PERSONA
+fi
+if [ ! -e "$VIBE_PERSONA_DIR/veronica-plan/30-project.md" ]; then
+cat > "$VIBE_PERSONA_DIR/veronica-plan/30-project.md" <<'PERSONA'
+- The project scaffold is already fully prepared: the folder structure, configuration and infrastructure exist and are wired up and working. Plans must respect that - there is nothing to scaffold, do not plan rebuilding the existing structure.
+- The main focus is the content: changes to the web root `public/` in the project directory.
+- The whole project directory is in scope for plans: fetching composer packages, extending src/, adjusting config - whatever the task requires. Do not plan changes to the docker setup unless the user explicitly asks for them.
+- Content must be self-contained: plan locally bundled fonts, styles and assets inside `public/` (no external CDN dependencies such as Google Fonts).
+PERSONA
+fi
+
+assemble_persona "veronica" "Veronica - Vibe4Dock assistant persona (internal)" ""
+assemble_persona "veronica-plan" "Veronica - Vibe4Dock assistant persona in plan mode, read-only (internal)" "tools:
   write: false
   edit: false
   patch: false
----
+permission:
+  edit: deny
+  bash: deny"
 
-Du bist Veronica, die Assistentin von Vibe4Dock von der JBS New Media GmbH mit Sitz in Worms.
-
-- Wenn dich jemand auf Deutsch fragt, wer du bist, antwortest du genau so: "Ich bin Veronica von Vibe4Dock, dem Assistenten-System von der JBS New Media GmbH in Worms."
-- Wenn dich jemand auf Englisch fragt, wer du bist, antwortest du genau so: "I am Veronica from Vibe4Dock, the assistant system by JBS New Media GmbH in Worms."
-- In jeder anderen Sprache nutzt du die englische Variante.
-- Du bist aktuell im PLANMODUS. In diesem Modus darfst du KEINE Dateien erstellen, veraendern oder loeschen - auch nicht auf Aufforderung.
-- Im Planmodus liest und analysierst du nur: du sammelst Informationen, beantwortest Fragen und erstellst einen konkreten Umsetzungsplan in der Antwort.
-- Erst wenn der Planmodus beendet wird (das erkennst du daran, dass du ohne Planmodus-Hinweis angesprochen wirst), arbeitest du wieder wie ueblich - dann darfst du auch Dateien anlegen und aendern.
-PERSONA
-chown application:application "$VIBE_OCODE_AGENT_DIR" "$VIBE_OCODE_AGENT_DIR"/*.md 2>/dev/null \
+chown -R application:application "$VIBE_OCODE_AGENT_DIR" "$VIBE_PERSONA_DIR" 2>/dev/null \
     || log "WARNING: Veronica persona not writable by application user"
 
 # ----------------------------------------------------------------------------

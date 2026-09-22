@@ -1,16 +1,16 @@
 /* ============================================================
-   Vibe4Dock – gemeinsamer Markdown-Renderer (Chat + Veronica)
+   Vibe4Dock - shared Markdown renderer (Chat + Veronica)
    ------------------------------------------------------------
-   Escape-first: jeglicher Eingabetext wird VOR jeder Verarbeitung
-   HTML-escaped; Markup erzeugt ausschließlich dieses Skript.
-   GFM-Subset, wie opencode es typischerweise ausgibt:
-   - Überschriften (# – ####), Absätze, <br> bei Zeilenumbruch
-   - Code-Fences ``` (mit optionaler Sprachzeile)
-   - Listen (verschachtelt) inkl. Task-Listen ([x] / [ ])
-   - GFM-Tabellen inkl. Alignment (:---, :---:, ---:)
-   - Blockquotes, hr, **fett**, *kursiv*, ~~durchgestrichen~~
-   - Links [Text](https://…), Autolinks <https://…>
-   Wird als global `md(text)` bereitgestellt (HTML-String).
+   Escape-first: all input text is HTML-escaped BEFORE any
+   processing; markup is produced exclusively by this script.
+   GFM subset, as opencode typically emits it:
+   - headings (# - ####), paragraphs, <br> on line breaks
+   - code fences ``` (with optional language line)
+   - lists (nested) incl. task lists ([x] / [ ])
+   - GFM tables incl. alignment (:---, :---:, ---:)
+   - blockquotes, hr, **bold**, *italic*, ~~strikethrough~~
+   - links [text](https://...), autolinks <https://...>
+   Provided as global `md(text)` (HTML string).
    ============================================================ */
 (function () {
     'use strict';
@@ -49,8 +49,8 @@
         return null;
     }
 
-    /* Verschachtelte Listen (ul/ol gemischt) + Task-List-Checkboxen.
-       Läuft auf escapedem Text. Gibt den Index der ersten Nicht-Listenzeile zurück. */
+    /* nested lists (ul/ol mixed) + task-list checkboxes.
+       Runs on escaped text. Returns the index of the first non-list line. */
     function parseList(lines, start, out) {
         var i = start;
         var stack = [];   // { tag: 'ul'|'ol', indent }
@@ -88,7 +88,7 @@
         return i;
     }
 
-    /* Block-Level auf escapedem Text (Fences wurden vorher extrahiert) */
+    /* block level on escaped text (fences extracted beforehand) */
     function mdBlock(seg, out) {
         var lines = seg.split('\n');
         var i = 0;
@@ -130,7 +130,7 @@
                 i = parseList(lines, i, out);
                 continue;
             }
-            /* GFM-Tabelle: Kopfzeile + Trennzeile (mindestens ein Pipe) */
+            /* GFM table: header row + separator row (at least one pipe) */
             if (line.indexOf('|') !== -1 && i + 1 < lines.length
                     && lines[i + 1].indexOf('|') !== -1
                     && /^\s*\|?[\s:|-]*-[\s:|-]*$/.test(lines[i + 1])) {
@@ -159,7 +159,7 @@
         flushPara();
     }
 
-    /* Einstiegspunkt: Rohtext → HTML */
+    /* entry point: raw text -> HTML */
     function md(text) {
         var parts = String(text == null ? '' : text).split(/```/);
         var out = '';

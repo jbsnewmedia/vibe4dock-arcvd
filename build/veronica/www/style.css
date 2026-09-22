@@ -70,8 +70,24 @@ img, svg { display: block; }
 a { color: var(--chat-accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-/* Inter via Google Fonts (graceful fallback wenn offline) */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Inter via Google Fonts (graceful fallback when offline) */
+/* Inter - bundled locally (no external requests) */
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('fonts/inter-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFB;
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('fonts/inter-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 /* ============================================================
    LAYOUT
@@ -147,6 +163,22 @@ a:hover { text-decoration: underline; }
     align-items: center;
     justify-content: center;
     transition: background var(--transition);
+}
+
+/* active model in the topbar (badge next to the model icon) */
+.model-menu-btn { width: auto; min-width: 40px; padding: 0 10px; gap: 6px; border-radius: 20px; }
+.model-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text);
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.model-badge[hidden] { display: none; }
+@media (max-width: 760px) {
+    .model-badge { max-width: 72px; }
 }
 .header-icon:hover { background: rgba(0, 0, 0, 0.05); }
 .header-icon:active { transform: scale(0.92); }
@@ -296,7 +328,7 @@ a:hover { text-decoration: underline; }
     font-weight: 700;
 }
 
-/* Mittlere Spalte (Name + Preview) */
+/* middle column (name + preview) */
 #session-list li .info {
     flex: 1;
     min-width: 0;
@@ -548,7 +580,7 @@ a:hover { text-decoration: underline; }
 #messages::-webkit-scrollbar { width: 8px; }
 #messages::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.10); border-radius: 4px; }
 
-/* Empty-State mit Illustration */
+/* empty state with illustration */
 .empty-state {
     margin: auto;
     padding: 32px;
@@ -607,7 +639,7 @@ a:hover { text-decoration: underline; }
     margin: 1px 12px;
     max-width: none;
 }
-/* Einflug-Animation nur fuer NEUE Nachrichten (Anti-Flicker) */
+/* fly-in animation for NEW messages only (anti-flicker) */
 .msg.animate {
     animation: msg-in 220ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1353,7 +1385,7 @@ a:hover { text-decoration: underline; }
     flex-shrink: 0;
 }
 
-/* @-Erwaehnung -> Link auf den Upload-Post */
+/* @ mention -> link to the upload post */
 a.file-mention {
     color: var(--primary-dark);
     background: var(--primary-dim);
@@ -1365,7 +1397,7 @@ a.file-mention {
 }
 a.file-mention:hover { text-decoration: underline; }
 
-/* kurzes Wackeln beim Sprung auf den Upload-Post */
+/* short shake when jumping to the upload post */
 @keyframes vibe-shake {
     0%, 100% { transform: translateX(0); }
     15% { transform: translateX(-7px); }
@@ -1473,7 +1505,7 @@ a.file-mention:hover { text-decoration: underline; }
    ============================================================ */
 #toggle-sidebar { display: none; }
 
-/* Rechter Topbar-Toggler (Mobil): nur sichtbar, wenn die Sidebar eingeklappt ist */
+/* right topbar toggle (mobile): visible only when the sidebar is collapsed */
 #toggle-sidebar-right { display: none; }
 #sidebar.hidden ~ #chat #toggle-sidebar-right { display: inline-flex; }
 
@@ -1497,10 +1529,10 @@ a.file-mention:hover { text-decoration: underline; }
         flex-shrink: 0;
         transition: none;
     }
-    /* Desktop: der Topbar-Toggle erscheint nur bei eingeklappter Sidebar */
+    /* desktop: the topbar toggle appears only with a collapsed sidebar */
     #toggle-sidebar { display: none; }
     #sidebar.hidden ~ #chat #toggle-sidebar { display: inline-flex; }
-    /* Der rechte Toggler entfällt auf Desktop */
+    /* the right toggle is omitted on desktop */
     #toggle-sidebar-right { display: none !important; }
     #sidebar-backdrop { display: none !important; }
     .msg .bubble { max-width: 72%; }
@@ -1521,7 +1553,7 @@ a.file-mention:hover { text-decoration: underline; }
    VERONICA – LOGIN, USER-BADGE, STATUS-TYPING
    ============================================================ */
 
-/* #app hat display:flex – [hidden] muss es sicher überdecken */
+/* #app has display:flex - [hidden] must reliably override it */
 #app[hidden] { display: none !important; }
 
 /* ---------- Login-Screen ---------- */
@@ -1736,7 +1768,7 @@ a.file-mention:hover { text-decoration: underline; }
     text-overflow: ellipsis;
 }
 
-/* ---------- Admin: Nutzerverwaltung ---------- */
+/* ---------- admin: user management ---------- */
 #admin-users-btn[hidden] { display: none; }
 #me-admin-badge {
     display: inline-block;
@@ -1996,7 +2028,7 @@ a.file-mention:hover { text-decoration: underline; }
 }
 #app-dialog-select[hidden] { display: none; }
 
-/* ---------- Upload-Nachrichten im Chat (nach Typ gruppiert) ---------- */
+/* ---------- upload messages in the chat (grouped by type) ---------- */
 #upload-groups {
     display: contents;
 }
@@ -2068,7 +2100,7 @@ a.file-mention:hover { text-decoration: underline; }
     color: #667781;
 }
 
-/* ---------- Fragen im Chat (Frage für Frage) ---------- */
+/* ---------- questions in the chat (question by question) ---------- */
 #question-inline {
     display: contents;
 }
@@ -2256,7 +2288,7 @@ a.file-mention:hover { text-decoration: underline; }
     gap: 8px;
 }
 
-/* Header-Switch in gleicher Groesse wie der Plan-Toggle */
+/* header switch in the same size as the plan toggle */
 #lang-switch-app.header-lang button {
     font-size: 12px;
     line-height: 1;
@@ -2332,13 +2364,13 @@ a.file-mention:hover { text-decoration: underline; }
 #lang-switch-menu { display: none; }
 
 @media (max-width: 759px) {
-    /* Status-Text wieder sichtbar (Plan-Toggle ist jetzt icon-only) */
+    /* status text visible again (plan toggle is icon-only now) */
 
-    /* Plan-Toggle: nur Icon */
+    /* plan toggle: icon only */
     #plan-mode-btn.plan-toggle span { display: none; }
     #plan-mode-btn.plan-toggle { padding: 5px 8px; gap: 0; }
 
-    /* DE/EN: nur im Chat-Menue */
+    /* DE/EN: in the chat menu only */
     #lang-switch-app { display: none !important; }
     #lang-switch-menu { display: flex; justify-content: center; }
     #lang-switch-menu .lang-switch button { font-size: 12px; padding: 7px 12px; }

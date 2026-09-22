@@ -7,7 +7,7 @@ services:
   vibe4dock:
     image: jbsnewmedia/vibe4dock-arcvd:1.0.4
     # build: .            # alternatively build locally
-    container_name: arcvd
+    container_name: ${CONTAINER_NAME:-arcvd}
     ports:
       # HOST_HTTP_PORT and HTTP_PORT come from the .env file
       - "${HOST_HTTP_PORT:-80}:${HTTP_PORT:-80}"
@@ -73,14 +73,15 @@ services:
     volumes:
       # Veronica user JSON DB (outside all web roots)
       - ./data:/data
-      # Project repo at /app (neun.app pattern): the agent works here and,
-      # when the repo has a public/ directory, that is served as the web root
-      # at "/". The Vibe4Dock start page stays reachable at /vibe-start.
-      # - ./:/app
-      # ... or the classic variant: repo at /app/project (Vibe-Diff, agent)
-      # - ./project:/app/project
+      # Project repo at /app: mount your project folder (fixed convention
+      # `./project`) - the agent works here and, when the repo has a
+      # public/ directory, that is served as the web root at "/".
+      # The Vibe4Dock start page stays reachable at /vibe-start.
+      - ./project:/app
       # opencode persistence: settings/auth, sessions, state (models.json)
       - ./opencode/config:/home/application/.config/opencode
+      # Extend the Veronica persona with your own rule files (see README):
+      # - ./veronica-persona:/home/application/.config/opencode/persona/veronica
       - ./opencode/share:/home/application/.local/share/opencode
       - ./opencode/state:/home/application/.local/state/opencode
     restart: unless-stopped
