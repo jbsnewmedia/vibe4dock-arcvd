@@ -1191,6 +1191,7 @@
             var p = parts[i];
             if (p.type === 'text' && p.text) {
                 bubble.insertAdjacentHTML('beforeend', md(p.text));
+                linkifyMentions(bubble);
                 hasContent = true;
             } else if (p.type === 'voice' && role === 'user' && p.duration != null) {
                 bubble.appendChild(buildVoiceBubble(p.duration));
@@ -1290,60 +1291,122 @@
         return parts.join('|');
     }
 
+    /* Inkrementelles Rendern: nur neue Nachrichten anhaengen, laufende
+       (Streaming-)Schlussnachricht ersetzen, Full-Rebuild nur bei
+       Strukturwechsel - verhindert das Flackern beim Refresh. */
+    var renderedSeq = [];   /* geordnete Keys der gerenderten Nachrichten */
+    var renderedSigs = [];  /* Inhalts-Signatur je gerenderter Nachricht */
+    var renderedNodes = []; /* gerenderte {node, post} Paare */
+    var lastDateKey = null;
+    var lastRole = null;
+    function keyOf(m) {
+        var info = m.info || m;
+        return (info.id || '') + ':' + (info.role || 'user') + ':' + ((info.time && info.time.completed) ? 1 : 0);
+    }
+    function msgContentSig(m) {
+        var t = '';
+        (m.parts || []).forEach(function (p) { if (p.type === 'text' && p.text) { t += p.text; } });
+        return t.length + ':' + hashString(t);
+    }
+    function appendMessageNode(m) {
+        var info = m.info || m;
+        var ts = (info.time && (info.time.completed || info.time.created)) || Date.now();
+        var d = new Date(ts);
+        var dayKey = d.toDateString();
+        if (dayKey !== lastDateKey) {
+            el.messages.appendChild(renderDateSeparator(d));
+            lastDateKey = dayKey;
+            lastRole = null;
+        }
+        var node = renderMessage(m);
+        if (!node) { return; } /* noch kein sichtbarer Text */
+        var role = info.role;
+        if (lastRole === role) { node.classList.add('grouped'); }
+        var key = keyOf(m);
+        if (!renderedMsgKeys[key]) {
+            node.classList.add('animate');
+            renderedMsgKeys[key] = true;
+        }
+        lastRole = role;
+        el.messages.appendChild(node);
+        /* Upload-Post unter dieser Nachricht: genau die Dateien, die sie per @ erwaehnt
+           (nachrichtenText statt DOM-Text: die Meta-Zeit klebt sonst am Dateinamen) */
+        var mentioned = mentionFilesInText(msgPartsText(m));
+        var post = mentioned.length ? buildUploadPostBubble(mentioned, false) : null;
+        if (post) { el.messages.appendChild(post); }
+        renderedSeq.push(key);
+        renderedSigs.push(msgContentSig(m));
+        renderedNodes.push({ node: node, post: post });
+    }
+
     function renderMessages(msgs) {
         var list = (msgs || []).filter(function (m) {
             var info = m.info || m;
             return info.role === 'user' || info.role === 'assistant';
         });
-        el.messages.innerHTML = '';
-        if (!list.length) {
-            var empty = document.createElement('div');
-            empty.className = 'empty-state';
-            empty.innerHTML =
-                '<svg class="emoji" viewBox="0 0 120 120" width="120" height="120" xmlns="http://www.w3.org/2000/svg">' +
-                    '<circle class="es-bg" cx="60" cy="60" r="55"/>' +
-                    '<rect x="22" y="38" width="60" height="46" rx="10" fill="white" stroke="var(--chat-text-meta)" stroke-width="2"/>' +
-                    '<path class="es-stroke" d="M30 50h44M30 60h32M30 70h28"/>' +
-                    '<circle class="es-accent" cx="78" cy="80" r="14"/>' +
-                    '<path class="es-stroke" stroke="white" stroke-width="2.5" d="M73 80l3 3 6-6"/>' +
-                '</svg>' +
-                '<h3 data-i18n="emptyTitle">' + esc(t('emptyTitle')) + '</h3>' +
-                '<div data-i18n="emptyBody">' + esc(t('emptyBody')) + '</div>';
-            el.messages.appendChild(empty);
-            renderUploadGroups(false);
-            renderQueuedMessages(false);
-            return;
+        var newKeys = list.map(keyOf);
+        var common = 0;
+        while (common < renderedSeq.length && common < newKeys.length && renderedSeq[common] === newKeys[common]) { common++; }
+        var tailReplaced = (renderedSeq.length === newKeys.length &&
+            common === renderedSeq.length - 1 &&
+            renderedSeq[renderedSeq.length - 1] !== newKeys[newKeys.length - 1]);
+        var structural = (common < renderedSeq.length && !tailReplaced) ||
+            (!newKeys.length && (renderedSeq.length || el.messages.querySelector('.empty-state') === null)) ||
+            (newKeys.length && el.messages.querySelector('.empty-state'));
+
+        if (structural || (!renderedSeq.length && newKeys.length)) {
+            el.messages.innerHTML = '';
+            renderedSeq = [];
+            renderedSigs = [];
+            renderedNodes = [];
+            lastDateKey = null;
+            lastRole = null;
+            if (!list.length) {
+                var empty = document.createElement('div');
+                empty.className = 'empty-state';
+                empty.innerHTML =
+                    '<svg class="emoji" viewBox="0 0 120 120" width="120" height="120" xmlns="http://www.w3.org/2000/svg">' +
+                        '<circle class="es-bg" cx="60" cy="60" r="55"/>' +
+                        '<rect x="22" y="38" width="60" height="46" rx="10" fill="white" stroke="var(--chat-text-meta)" stroke-width="2"/>' +
+                        '<path class="es-stroke" d="M30 50h44M30 60h32M30 70h28"/>' +
+                        '<circle class="es-accent" cx="78" cy="80" r="14"/>' +
+                        '<path class="es-stroke" stroke="white" stroke-width="2.5" d="M73 80l3 3 6-6"/>' +
+                    '</svg>' +
+                    '<h3 data-i18n="emptyTitle">' + esc(t('emptyTitle')) + '</h3>' +
+                    '<div data-i18n="emptyBody">' + esc(t('emptyBody')) + '</div>';
+                el.messages.appendChild(empty);
+            } else {
+                list.forEach(appendMessageNode);
+            }
+        } else if (sameAsRendered(newKeys, list)) {
+            /* nichts Neues: kein Rebuild (Anti-Flicker), Rest-Pflege unten */
+        } else if (common < newKeys.length) {
+            list.slice(common).forEach(appendMessageNode);
+        } else if (tailReplaced || msgContentSig(list[list.length - 1]) !== renderedSigs[renderedSigs.length - 1]) {
+            /* Streaming: letzte Nachricht ersetzen */
+            var tail = renderedNodes[renderedNodes.length - 1];
+            if (tail && tail.node.parentNode) { tail.node.parentNode.removeChild(tail.node); }
+            if (tail && tail.post && tail.post.parentNode) { tail.post.parentNode.removeChild(tail.post); }
+            renderedSeq.pop(); renderedSigs.pop(); renderedNodes.pop();
+            appendMessageNode(list[list.length - 1]);
         }
-        var lastDate = null;
-        var lastRole = null;
-        list.forEach(function (m) {
-            var info = m.info || m;
-            var ts = (info.time && (info.time.completed || info.time.created)) || Date.now();
-            var d = new Date(ts);
-            var dayKey = d.toDateString();
-            if (dayKey !== lastDate) {
-                el.messages.appendChild(renderDateSeparator(d));
-                lastDate = dayKey;
-                lastRole = null;
-            }
-            var node = renderMessage(m);
-            if (!node) return; // noch kein sichtbarer Text
-            var role = info.role;
-            if (lastRole === role) node.classList.add('grouped');
-            var key = (info.id || '') + ':' + role + ':' + ((info.time && info.time.completed) ? 1 : 0);
-            if (!renderedMsgKeys[key]) {
-                node.classList.add('animate');
-                renderedMsgKeys[key] = true;
-            }
-            lastRole = role;
-            el.messages.appendChild(node);
-        });
+
         var qa = document.getElementById('question-answers');
         if (qa && qa.parentNode) { el.messages.appendChild(qa); }
-        renderUploadGroups(false);
         renderQueuedMessages(false);
         renderInlineQuestions(false);
         scrollToBottom();
+    }
+
+    function sameAsRendered(newKeys, list) {
+        if (newKeys.length !== renderedSeq.length) { return false; }
+        for (var i = 0; i < newKeys.length; i++) {
+            if (newKeys[i] !== renderedSeq[i]) { return false; }
+        }
+        for (var i = 0; i < list.length; i++) {
+            if (msgContentSig(list[i]) !== renderedSigs[i]) { return false; }
+        }
+        return true;
     }
 
     function renderDateSeparator(d) {
@@ -1756,7 +1819,7 @@
             input.className = 'question-input';
             input.placeholder = opts.length ? t('ownAnswerPh') : t('ownAnswer');
             var echoTextFor = function (vals) {
-                return (q.header ? q.header + ': ' : '') + vals.join(', ');
+                return (q.header ? q.header + ': ' : '') + (vals.join(', ') || '(keine Angabe)');
             };
             var submit = function (vals) {
                 var all = state.qPendingAnswers[reqId] = state.qPendingAnswers[reqId] || [];
@@ -1805,7 +1868,12 @@
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     var v = input.value.trim();
-                    if (v) submit([v]);
+                    if (v) {
+                        submit([v]);
+                    } else if (opts.length) {
+                        /* Optionale Antwort leer -> Frage ohne Angabe ueberspringen */
+                        submit([]);
+                    }
                 }
             });
             inputWrap.appendChild(input);
@@ -1942,6 +2010,8 @@
         }
         if (window.CHAT_CONFIG && window.CHAT_CONFIG.agent) {
             body.agent = window.CHAT_CONFIG.agent;
+        } else {
+            body.agent = 'veronica';
         }
         api('POST', '/session/' + state.sessionId + '/prompt_async', body)
             .then(function () { return refresh(); })
@@ -2113,6 +2183,8 @@
     /* ============================================================
        COMPOSER & SENDEN
        ============================================================ */
+    /* Sprachnachricht deaktiviert (Feature bleibt erhalten, Flipp-Flag) */
+    var VOICE_ENABLED = false;
     function updateComposerState() {
         var hasText = el.prompt.value.trim().length > 0;
         if (state.recording) {
@@ -2123,7 +2195,7 @@
             el.prompt.disabled = true;
         } else {
             /* Scheduler: Tippen + Senden auch während Veronica schreibt */
-            el.micBtn.hidden = hasText;
+            el.micBtn.hidden = !VOICE_ENABLED || hasText;
             el.sendBtn.hidden = !hasText;
             el.stopBtn.hidden = !state.generating || hasText;
             el.attachBtn.disabled = false;
@@ -2350,7 +2422,7 @@
     function runCommand(found) {
         var cmd = found.command;
         var body = { command: cmd.name, arguments: expandMentions(found.args) };
-        if (window.CHAT_CONFIG && window.CHAT_CONFIG.agent) { body.agent = window.CHAT_CONFIG.agent; }
+        if (window.CHAT_CONFIG && window.CHAT_CONFIG.agent) { body.agent = window.CHAT_CONFIG.agent; } else { body.agent = 'veronica'; }
         var cmdModel = preferredModel();
         if (cmdModel) { body.model = cmdModel.providerID + '/' + cmdModel.modelID; }
         var ensure = state.sessionId
@@ -2420,9 +2492,13 @@
                     body.modelID = pref.modelID;
                 }
                 if (state.planMode) {
-                    body.agent = 'plan';
+                    /* Planmodus intern: Veronicas eigene Persona mit
+                       deaktivierten Datei-Tools (statt generischem plan-Agent) */
+                    body.agent = 'veronica-plan';
                 } else if (window.CHAT_CONFIG && window.CHAT_CONFIG.agent) {
                     body.agent = window.CHAT_CONFIG.agent;
+                } else {
+                    body.agent = 'veronica';
                 }
                 return api('POST', '/session/' + state.sessionId + '/prompt_async', body)
                     .then(function () { return refresh(); });
@@ -2616,7 +2692,6 @@
                 if (state.backend === 'api') loadIncomingApi();
                 if (uploaded.length) {
                     recordSessionUploads(uploaded);
-                    renderUploadGroups(true);
                 }
                 setTimeout(function () {
                     el.uploadStatus.hidden = true;
@@ -2676,82 +2751,157 @@
         try { pending = JSON.parse(raw) || []; } catch (e) { pending = []; }
         if (pending.length) {
             recordSessionUploads(pending);
-            renderUploadGroups(true);
         }
     }
     function uploadFileUrl(name) {
         return API_BASE + '/upload/file?name=' + encodeURIComponent(name);
     }
     var lastUploadsSig = null;
-    var uploadGroupsNode = null;
+    function sanitizeFileId(name) {
+        return String(name).replace(/[^A-Za-z0-9]/g, '_');
+    }
+    /* Upload-Post-Logik: jede Nachricht, die eine Session-Datei per @name
+       (gesendet als @incoming/<name>) erwaehnt, bekommt direkt DARUNTER einen
+       eigenen Post mit genau den Dateien dieser Nachricht. Der globale Post am
+       Chat-Ende haelt nur noch Uploads, die in keiner Nachricht erwaehnt sind. */
+    function uploadNameMap() {
+        var names = {};
+        getSessionUploads().forEach(function (u) {
+            names[String(u.name).toLowerCase()] = u;
+        });
+        return names;
+    }
+    function msgPartsText(m) {
+        var t = '';
+        ((m && m.parts) || []).forEach(function (p) {
+            if (p.type === 'text' && p.text) { t += p.text; }
+        });
+        return t;
+    }
+    function mentionFilesInText(text) {
+        if (!text || String(text).indexOf('@') === -1) { return []; }
+        var names = uploadNameMap();
+        var out = [];
+        var seen = {};
+        String(text).replace(/(^|[\s(])@((?:incoming\/)?[A-Za-z0-9._\-]+)/g, function (full, pre, raw) {
+            var name = String(raw).replace(/^incoming\//i, '');
+            var u = names[name.toLowerCase()];
+            if (u && !seen[u.name]) { seen[u.name] = 1; out.push(u); }
+            return full;
+        });
+        return out;
+    }
+    function buildUploadPostBubble(files, withIds) {
+        var buckets = {};
+        (files || []).forEach(function (u) {
+            (buckets[u.key] = buckets[u.key] || []).push(u);
+        });
+        var host = document.createElement('div');
+        host.className = 'upload-post';
+        Object.keys(buckets).sort(function (a, b) {
+            return UPLOAD_TYPE_ORDER.indexOf(a) - UPLOAD_TYPE_ORDER.indexOf(b);
+        }).forEach(function (key) {
+            var bucket = buckets[key];
+            var wrap = document.createElement('div');
+            wrap.className = 'msg user animate';
+            var bubble = document.createElement('div');
+            bubble.className = 'bubble upload-msg-bubble';
+            var label = document.createElement('div');
+            label.className = 'upload-msg-label';
+            label.textContent = uploadTypeLabel(key) + ' (' + bucket.length + ')';
+            bubble.appendChild(label);
+            bucket.forEach(function (u) {
+                var card = document.createElement('a');
+                card.className = 'upload-msg-card';
+                card.href = uploadFileUrl(u.name);
+                card.target = '_blank';
+                card.rel = 'noopener';
+                card.setAttribute('data-file', u.name);
+                if (withIds) { card.id = 'upload-file-' + sanitizeFileId(u.name); }
+                if (key === 'image') {
+                    var img = document.createElement('img');
+                    img.className = 'upload-msg-preview';
+                    img.src = uploadFileUrl(u.name);
+                    img.alt = u.name;
+                    img.loading = 'lazy';
+                    card.appendChild(img);
+                } else {
+                    var badge = document.createElement('span');
+                    badge.className = 'file-badge';
+                    badge.style.background = fileTypeMeta(u.name).color;
+                    badge.textContent = fileTypeMeta(u.name).ext;
+                    card.appendChild(badge);
+                }
+                var info = document.createElement('span');
+                info.className = 'file-info';
+                var nameEl = document.createElement('span');
+                nameEl.className = 'file-name';
+                nameEl.textContent = u.name;
+                var sizeEl = document.createElement('span');
+                sizeEl.className = 'file-size';
+                sizeEl.textContent = formatBytes(u.size) + ' · öffnen';
+                info.appendChild(nameEl);
+                info.appendChild(sizeEl);
+                card.appendChild(info);
+                bubble.appendChild(card);
+            });
+            wrap.appendChild(bubble);
+            host.appendChild(wrap);
+        });
+        return host;
+    }
     function renderUploadGroups(scroll) {
-        if (!uploadGroupsNode) {
-            uploadGroupsNode = document.createElement('div');
-            uploadGroupsNode.id = 'upload-groups';
-        }
-        var host = uploadGroupsNode;
-        if (host.parentNode) host.parentNode.removeChild(host);
+        /* Entfernt: Uploads zeigen keinen Chat-Post mehr, bevor die Nachricht
+           mit der @-Erwaehnung tatsaechlich gesendet wurde. Der Datei-Post
+           entsteht ausschliesslich unter dem abgesendeten Post. */
+        var host = document.getElementById('upload-groups');
+        if (host && host.parentNode) { host.parentNode.removeChild(host); }
+    }
+
+    /* ---------- @-Erwaehnungen in Nachrichten -> Link auf den Upload-Post ---------- */
+    function linkifyMentions(bubble) {
         var uploads = getSessionUploads();
-        if (!uploads.length) { lastUploadsSig = null; return; }
-        var sig = JSON.stringify(uploads);
-        if (sig !== lastUploadsSig) {
-            lastUploadsSig = sig;
-            host.innerHTML = '';
-            var buckets = {};
-            uploads.forEach(function (u) {
-                (buckets[u.key] = buckets[u.key] || []).push(u);
-            });
-            Object.keys(buckets).sort(function (a, b) {
-                return UPLOAD_TYPE_ORDER.indexOf(a) - UPLOAD_TYPE_ORDER.indexOf(b);
-            }).forEach(function (key) {
-                var files = buckets[key];
-                var wrap = document.createElement('div');
-                wrap.className = 'msg user animate';
-                var bubble = document.createElement('div');
-                bubble.className = 'bubble upload-msg-bubble';
-                var label = document.createElement('div');
-                label.className = 'upload-msg-label';
-                label.textContent = uploadTypeLabel(key) + ' (' + files.length + ')';
-                bubble.appendChild(label);
-                files.forEach(function (u) {
-                    var card = document.createElement('a');
-                    card.className = 'upload-msg-card';
-                    card.href = uploadFileUrl(u.name);
-                    card.target = '_blank';
-                    card.rel = 'noopener';
-                    if (key === 'image') {
-                        var img = document.createElement('img');
-                        img.className = 'upload-msg-preview';
-                        img.src = uploadFileUrl(u.name);
-                        img.alt = u.name;
-                        img.loading = 'lazy';
-                        card.appendChild(img);
-                    } else {
-                        var badge = document.createElement('span');
-                        badge.className = 'file-badge';
-                        badge.style.background = fileTypeMeta(u.name).color;
-                        badge.textContent = fileTypeMeta(u.name).ext;
-                        card.appendChild(badge);
-                    }
-                    var info = document.createElement('span');
-                    info.className = 'file-info';
-                    var nameEl = document.createElement('span');
-                    nameEl.className = 'file-name';
-                    nameEl.textContent = u.name;
-                    var sizeEl = document.createElement('span');
-                    sizeEl.className = 'file-size';
-                    sizeEl.textContent = formatBytes(u.size) + ' · öffnen';
-                    info.appendChild(nameEl);
-                    info.appendChild(sizeEl);
-                    card.appendChild(info);
-                    bubble.appendChild(card);
-                });
-                wrap.appendChild(bubble);
-                host.appendChild(wrap);
-            });
+        if (!uploads.length) { return; }
+        var names = {};
+        uploads.forEach(function (u) { names[String(u.name).toLowerCase()] = String(u.name); });
+        var walker = document.createTreeWalker(bubble, NodeFilter.SHOW_TEXT, null, false);
+        var hits = [];
+        var node;
+        while ((node = walker.nextNode())) {
+            if ((node.nodeValue || '').indexOf('@') !== -1) { hits.push(node); }
         }
-        el.messages.appendChild(host);
-        if (scroll) scrollToBottom(true);
+        hits.forEach(function (textNode) {
+            var replaced = false;
+            var html = esc(textNode.nodeValue).replace(/(^|[\s(])@((?:incoming\/)?[A-Za-z0-9._\-]+)/g, function (full, pre, rawName) {
+                var name = String(rawName).replace(/^incoming\//i, '');
+                var actual = names[name.toLowerCase()];
+                if (!actual) { return full; }
+                replaced = true;
+                return pre + '<a href="' + esc(uploadFileUrl(actual)) + '" class="file-mention" data-file="' + esc(actual) + '">@' + esc(rawName) + '</a>';
+            });
+            if (replaced) {
+                var span = document.createElement('span');
+                span.innerHTML = html;
+                textNode.parentNode.replaceChild(span, textNode);
+            }
+        });
+    }
+    function jumpToUpload(name, sourceMsg) {
+        var sel = '.upload-msg-card[data-file="' + String(name).replace(/"/g, '') + '"]';
+        var card = null;
+        if (sourceMsg) {
+            var sib = sourceMsg.nextElementSibling;
+            if (sib && sib.classList && sib.classList.contains('upload-post')) {
+                card = sib.querySelector(sel);
+            }
+        }
+        if (!card) { card = document.querySelector(sel); }
+        if (!card) { window.open(uploadFileUrl(name), '_blank', 'noopener'); return; }
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.remove('shake');
+        void card.offsetWidth;
+        card.classList.add('shake');
+        setTimeout(function () { card.classList.remove('shake'); }, 700);
     }
 
     function insertAtCursor(text) {
@@ -3010,6 +3160,14 @@
 
         /* PLAN-MODUS Toggle */
         if (el.planModeBtn) el.planModeBtn.addEventListener('click', togglePlanMode);
+
+        /* @-Erwaehnungen -> Sprung zum Upload-Post unter dieser Nachricht (kurz wackeln) */
+        el.messages.addEventListener('click', function (e) {
+            var a = e.target && e.target.closest ? e.target.closest('a.file-mention') : null;
+            if (!a) { return; }
+            e.preventDefault();
+            jumpToUpload(a.getAttribute('data-file'), a.closest('.msg'));
+        });
 
         /* Logout */
         el.logout.addEventListener('click', logout);
@@ -3402,7 +3560,6 @@
         renderUserBadge();
         if (state.user) {
             renderMessages(state.lastMsgs || []);
-            renderUploadGroups(true);
             el.statusText.textContent = state.generating ? t('statusTyping') : t('statusOnline');
         }
         renderInlineQuestions(false);

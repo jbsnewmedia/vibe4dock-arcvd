@@ -17,9 +17,10 @@ VIBE_PREFIX="${VIBE_PREFIX:-vibe}"
 HTTP_PORT="${HTTP_PORT:-80}"
 HTTPS_PORT="${HTTPS_PORT:-}"
 VERONICA_USERS_FILE="${VERONICA_USERS_FILE:-/data/veronica-users.json}"
-WEB_ROOT="/app/public"
-CHAT_WWW="/app/chat-www"
-VERONICA_WWW="/app/veronica-www"
+VIBE_HOME="/opt/vibe"
+WEB_ROOT=""                         # resolved below: project public/ or baked start page
+CHAT_WWW="$VIBE_HOME/chat-www"
+VERONICA_WWW="$VIBE_HOME/veronica-www"
 CONFIG_DIR="/etc/vibe"
 FPM_SOCKET="/run/php-fpm-vibe.sock"
 VIBE_NAME="${VIBE_NAME:-Vibe4Dock}"
@@ -126,7 +127,32 @@ else
     DIFF_AUTH_BLOCK=""
     log "Vibe-Diff: no auth (DIFF_USERNAME/DIFF_PASSWORD not set)"
 fi
-export VIBE_DIFF_REPO="${VIBE_DIFF_REPO:-$(dirname "$WEB_ROOT")}"
+# ----------------------------------------------------------------------------
+# Project dir + web root: the project repo may be mounted at /app (compose
+# pattern `./:/app`, like any PHP project with a public/ web root). When it
+# has a public/ directory that becomes the web root ("/"); otherwise the
+# baked Vibe4Dock start page is served (and stays reachable at /${P}-start).
+# ----------------------------------------------------------------------------
+PROJECT_DIR="${VIBE_PROJECT_DIR:-}"
+if [ -z "$PROJECT_DIR" ]; then
+    if [ -e /app/composer.json ] || [ -e /app/.git ] || [ -e /app/package.json ] || [ -d /app/public ]; then
+        PROJECT_DIR="/app"
+    elif [ -d /app/project ]; then
+        PROJECT_DIR="/app/project"
+    fi
+fi
+PROJECT_DIR="${PROJECT_DIR%/}"
+if [ -z "$WEB_ROOT" ]; then
+    if [ -n "$PROJECT_DIR" ] && [ -d "$PROJECT_DIR/public" ]; then
+        WEB_ROOT="$PROJECT_DIR/public"
+    else
+        WEB_ROOT="$VIBE_HOME/www"
+    fi
+fi
+export VIBE_PROJECT_DIR="$PROJECT_DIR" VIBE_WEB_ROOT="$WEB_ROOT"
+log "Project dir: ${PROJECT_DIR:-none} | Web root: $WEB_ROOT"
+
+export VIBE_DIFF_REPO="${VIBE_DIFF_REPO:-${PROJECT_DIR:-/app/project}}"
 
 # ----------------------------------------------------------------------------
 # Frontend config.js + cache busting (same mechanism as the addon start.sh)
@@ -191,11 +217,11 @@ MAN
 gen_manifest "$CHAT_WWW/manifest.json" chat "chat" "#16181d" "#16181d"
 gen_manifest "$VERONICA_WWW/manifest.json" veronica "veronica" "#54656f" "#f0f2f5"
 
-sed -i "s|<title>Vibe4Dock</title>|<title>${VIBE_NAME} - Vibe4Dock</title>|" "$WEB_ROOT/index.php"
-sed -i "s|<h1>Vibe4Dock is running</h1>|<h1>${VIBE_NAME} is running</h1>|" "$WEB_ROOT/index.php"
-sed -i "s|<meta property=\"og:title\" content=\"[^\"]*\">|<meta property=\"og:title\" content=\"${VIBE_NAME}\">|" "$WEB_ROOT/index.php"
-sed -i "s|<h1>Vibe4Dock is running</h1>|<h1>${VIBE_NAME} is running</h1>|" "$WEB_ROOT/index.php"
-sed -i "s|<meta property=\"og:title\" content=\"[^\"]*\">|<meta property=\"og:title\" content=\"${VIBE_NAME}\">|" "$WEB_ROOT/index.php"
+if [ -f "$WEB_ROOT/index.php" ]; then
+    sed -i "s|<title>Vibe4Dock</title>|<title>${VIBE_NAME} - Vibe4Dock</title>|" "$WEB_ROOT/index.php"
+    sed -i "s|<h1>Vibe4Dock is running</h1>|<h1>${VIBE_NAME} is running</h1>|" "$WEB_ROOT/index.php"
+    sed -i "s|<meta property=\"og:title\" content=\"[^\"]*\">|<meta property=\"og:title\" content=\"${VIBE_NAME}\">|" "$WEB_ROOT/index.php"
+fi
 
 chown -R application:application "$CHAT_WWW" "$VERONICA_WWW"
 
@@ -307,6 +333,7 @@ fi
 export OPENCODE_PROVIDER="${CHAT_OPENCODE_PROVIDER:-${OPENCODE_PROVIDER:-}}"
 export OPENCODE_MODEL="${CHAT_OPENCODE_MODEL:-${OPENCODE_MODEL:-}}"
 export OPENCODE_AGENT="${CHAT_OPENCODE_AGENT:-${OPENCODE_AGENT:-}}"
+cd "${VIBE_PROJECT_DIR:-/app/project}"
 exec opencode serve --hostname 127.0.0.1 --port 4577 --print-logs --log-level INFO
 WRAP
 
@@ -322,6 +349,7 @@ fi
 export OPENCODE_PROVIDER="${VERONICA_OPENCODE_PROVIDER:-${OPENCODE_PROVIDER:-}}"
 export OPENCODE_MODEL="${VERONICA_OPENCODE_MODEL:-${OPENCODE_MODEL:-}}"
 export OPENCODE_AGENT="${VERONICA_OPENCODE_AGENT:-${OPENCODE_AGENT:-}}"
+cd "${VIBE_PROJECT_DIR:-/app/project}"
 exec opencode serve --hostname 127.0.0.1 --port 4578 --print-logs --log-level INFO
 WRAP
 
@@ -439,9 +467,9 @@ ${CHAT_AUTH_BLOCK}
 </Location>
 # Upload endpoints -> PHP via FPM (writes into the project's incoming/ dir)
 ProxyPass /${P}-chat/api/upload !
-Alias /${P}-chat/api/upload/file /app/php/upload-api.php
-Alias /${P}-chat/api/upload/list /app/php/upload-api.php
-Alias /${P}-chat/api/upload /app/php/upload-api.php
+Alias /${P}-chat/api/upload/file ${VIBE_HOME}/php/upload-api.php
+Alias /${P}-chat/api/upload/list ${VIBE_HOME}/php/upload-api.php
+Alias /${P}-chat/api/upload ${VIBE_HOME}/php/upload-api.php
 ProxyPass /${P}-chat/api/ http://127.0.0.1:4577/ retry=0
 Alias /${P}-chat/models.json /home/application/.local/state/opencode/model.json
 <Location /${P}-chat/models.json>
@@ -449,19 +477,19 @@ ${CHAT_MODELS_AUTH}
     ForceType application/json
     Header set Cache-Control "no-cache"
 </Location>
-Alias /${P}-chat/ /app/chat-www/
+Alias /${P}-chat/ ${VIBE_HOME}/chat-www/
 RedirectMatch 301 ^/${P}-chat\$ /${P}-chat/
 
 <Location /${P}-veronica>
 ${VERONICA_AUTH_BLOCK}
 </Location>
 ProxyPass /${P}-veronica/api/users !
-Alias /${P}-veronica/api/users /app/php/veronica-users-api.php
+Alias /${P}-veronica/api/users ${VIBE_HOME}/php/veronica-users-api.php
 # Upload endpoints -> PHP via FPM (writes into the project's incoming/ dir)
 ProxyPass /${P}-veronica/api/upload !
-Alias /${P}-veronica/api/upload/file /app/php/upload-api.php
-Alias /${P}-veronica/api/upload/list /app/php/upload-api.php
-Alias /${P}-veronica/api/upload /app/php/upload-api.php
+Alias /${P}-veronica/api/upload/file ${VIBE_HOME}/php/upload-api.php
+Alias /${P}-veronica/api/upload/list ${VIBE_HOME}/php/upload-api.php
+Alias /${P}-veronica/api/upload ${VIBE_HOME}/php/upload-api.php
 ProxyPass /${P}-veronica/api/ http://127.0.0.1:4578/ retry=0
 Alias /${P}-veronica/models.json /home/application/.local/state/opencode/model.json
 <Location /${P}-veronica/models.json>
@@ -469,14 +497,19 @@ ${VERONICA_MODELS_AUTH}
     ForceType application/json
     Header set Cache-Control "no-cache"
 </Location>
-Alias /${P}-veronica/ /app/veronica-www/
+Alias /${P}-veronica/ ${VIBE_HOME}/veronica-www/
 RedirectMatch 301 ^/${P}-veronica\$ /${P}-veronica/
 
 <Location /${P}-diff>
 ${DIFF_AUTH_BLOCK}
 </Location>
-Alias /${P}-diff/ /app/diff-www/
+Alias /${P}-diff/ ${VIBE_HOME}/diff-www/
 RedirectMatch 301 ^/${P}-diff\$ /${P}-diff/
+
+# Vibe4Dock start page (reachable even when a project public/ owns the web root)
+Alias /${P}-start/ ${VIBE_HOME}/www/
+Alias /${P}-start ${VIBE_HOME}/www
+RedirectMatch 301 ^/${P}-start\$ /${P}-start/
 
 <Location /${P}-shell-root>
 ${ROOT_AUTH_BLOCK}
@@ -512,19 +545,19 @@ write_vhost_body() {
         DirectoryIndex index.php index.html
 ${SITE_DIR_AUTH}
     </Directory>
-    <Directory /app/php>
+    <Directory ${VIBE_HOME}>
         Options -Indexes
         Require all granted
     </Directory>
-    <Directory /app/chat-www>
+    <Directory ${VIBE_HOME}/www>
         Options -Indexes
         Require all granted
     </Directory>
-    <Directory /app/veronica-www>
+    <Directory ${VIBE_HOME}/php>
         Options -Indexes
         Require all granted
     </Directory>
-    <Directory /app/diff-www>
+    <Directory ${VIBE_HOME}/diff-www>
         Options -Indexes
         Require all granted
     </Directory>
@@ -570,7 +603,7 @@ SSL
     log "HTTPS enabled on port ${HTTPS_PORT}"
 fi
 
-log "Routes: / | /${P}-chat | /${P}-veronica | /${P}-shell-root | /${P}-shell-app"
+log "Routes: / (project public/ or start page) | /${P}-start | /${P}-chat | /${P}-veronica | /${P}-diff | /${P}-shell-root | /${P}-shell-app"
 
 # ----------------------------------------------------------------------------
 # opencode data dirs: prepare for optional bind mounts (config, sessions,
@@ -587,11 +620,57 @@ chown -R application:application \
     || log "WARNING: opencode data dirs not writable by application user - settings/sessions may not persist"
 
 # ----------------------------------------------------------------------------
+# Veronica persona: hidden primary agents so Veronica keeps her identity in
+# normal and plan mode (instead of switching to opencode's generic plan agent).
+# The plan variant disables all file tools (write/edit/patch) at agent level.
+# ----------------------------------------------------------------------------
+VIBE_OCODE_AGENT_DIR="/home/application/.config/opencode/agent"
+mkdir -p "$VIBE_OCODE_AGENT_DIR"
+cat > "$VIBE_OCODE_AGENT_DIR/veronica.md" <<'PERSONA'
+---
+description: Veronica - Persona der Vibe4Dock-Assistentin (intern)
+mode: primary
+hidden: true
+---
+
+Du bist Veronica, die Assistentin von Vibe4Dock von der JBS New Media GmbH mit Sitz in Worms.
+
+- Wenn dich jemand auf Deutsch fragt, wer du bist, antwortest du genau so: "Ich bin Veronica von Vibe4Dock, dem Assistenten-System von der JBS New Media GmbH in Worms."
+- Wenn dich jemand auf Englisch fragt, wer du bist, antwortest du genau so: "I am Veronica from Vibe4Dock, the assistant system by JBS New Media GmbH in Worms."
+- In jeder anderen Sprache nutzt du die englische Variante.
+- Du bist freundlich, praezise und loesungsorientiert und antwortest in der Sprache der Frage (Deutsch oder Englisch).
+- Du arbeitest direkt im Projektverzeichnis der Nutzer:innen.
+PERSONA
+cat > "$VIBE_OCODE_AGENT_DIR/veronica-plan.md" <<'PERSONA'
+---
+description: Veronica - Persona im Planmodus, nur Lesen und Planen (intern)
+mode: primary
+hidden: true
+tools:
+  write: false
+  edit: false
+  patch: false
+---
+
+Du bist Veronica, die Assistentin von Vibe4Dock von der JBS New Media GmbH mit Sitz in Worms.
+
+- Wenn dich jemand auf Deutsch fragt, wer du bist, antwortest du genau so: "Ich bin Veronica von Vibe4Dock, dem Assistenten-System von der JBS New Media GmbH in Worms."
+- Wenn dich jemand auf Englisch fragt, wer du bist, antwortest du genau so: "I am Veronica from Vibe4Dock, the assistant system by JBS New Media GmbH in Worms."
+- In jeder anderen Sprache nutzt du die englische Variante.
+- Du bist aktuell im PLANMODUS. In diesem Modus darfst du KEINE Dateien erstellen, veraendern oder loeschen - auch nicht auf Aufforderung.
+- Im Planmodus liest und analysierst du nur: du sammelst Informationen, beantwortest Fragen und erstellst einen konkreten Umsetzungsplan in der Antwort.
+- Erst wenn der Planmodus beendet wird (das erkennst du daran, dass du ohne Planmodus-Hinweis angesprochen wirst), arbeitest du wieder wie ueblich - dann darfst du auch Dateien anlegen und aendern.
+PERSONA
+chown application:application "$VIBE_OCODE_AGENT_DIR" "$VIBE_OCODE_AGENT_DIR"/*.md 2>/dev/null \
+    || log "WARNING: Veronica persona not writable by application user"
+
+# ----------------------------------------------------------------------------
 # Chat/Veronica uploads land in the project's incoming/ dir so the agent can
 # reference them via @name. The project dir may be a bind mount owned by root -
 # hand the incoming dir to the application user (php-fpm) for uploads.
 # ----------------------------------------------------------------------------
-VIBE_INCOMING_DIR="${VIBE_INCOMING_DIR:-/app/project/incoming}"
+VIBE_INCOMING_DIR="${VIBE_INCOMING_DIR:-${VIBE_PROJECT_DIR:-/app/project}/incoming}"
+export VIBE_INCOMING_DIR
 mkdir -p "$VIBE_INCOMING_DIR"
 chown application:application "$VIBE_INCOMING_DIR" 2>/dev/null \
     || log "WARNING: $VIBE_INCOMING_DIR not chown-able - file uploads may fail"

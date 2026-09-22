@@ -63,24 +63,35 @@ General rule: **auth is only active when BOTH username and password are set.**
 Shared: `OPENCODE_API_KEY`, `OPENCODE_PROVIDER`, `OPENCODE_MODEL`, `OPENCODE_AGENT`.
 Per-service overrides: `CHAT_OPENCODE_*` or `VERONICA_OPENCODE_*` (API_KEY, PROVIDER, MODEL, AGENT).
 
+### Project repo & web root (/app, neun.app pattern)
+
+The project repo lives at **`/app`** (compose pattern `./:/app`) - exactly like a plain PHP project:
+
+- The **opencode agents (chat + veronica) work in `/app`** - their files survive container rebuilds because the repo is a bind mount
+- If the repo has a **`public/` directory, it is served as the web root at `/`** (the app becomes the main page)
+- Without a project - or without `public/` - the **Vibe4Dock start page** is served; it stays reachable at **`/{VIBE_PREFIX}-start`** either way
+- Classic variant still works: repo at `/app/project` (`- ./project:/app/project`)
+
+Detection order for the project dir (`VIBE_PROJECT_DIR` overrides it): `/app` when it looks like a repo (composer.json / .git / package.json / public/), otherwise `/app/project` when present. Defaults derived from it: web root `$PROJECT/public`, Vibe-Diff repo `$PROJECT`, upload dir `$PROJECT/incoming`.
+
 ### File uploads (Chat + Veronica)
 
-The 📎 button uploads to the project's `incoming/` directory; files are referenced in the prompt via `@filename`. Optional: `VIBE_INCOMING_DIR` overrides the target directory (default `/app/project/incoming`; set it if the project bind mount is read-only). Upload limit: 100 MB per file.
+The 📎 button uploads to the project's `incoming/` directory; files are referenced in the prompt via `@filename`. Optional: `VIBE_INCOMING_DIR` overrides the target directory (default `<project>/incoming`; set it if the project bind mount is read-only). Upload limit: 100 MB per file.
 
 ### Vibe-Diff (git working tree UI)
 
 Browser UI for the git repo behind the code: current branch, branch list (with checkout), last 50 commits, changed files, and a unified diff view with **line-level and block-level revert** (like an IDE) plus whole-file revert. Language follows the `vibe4dock.lang` cookie (set by the chat/veronica UIs or the DE/EN switch in the header).
 
-- `VIBE_DIFF_REPO` - repo path inside the container; **default: parent of the webroot (`/app`)**, i.e. `git ../` relative to the webroot. Mount your project repo (rw - reverts write to the worktree) and point this env to it
+- `VIBE_DIFF_REPO` - repo path inside the container; **default: the project dir** (`/app` with the `./:/app` mount, otherwise `/app/project`). Mount your project repo (rw - reverts write to the worktree)
 - `DIFF_USERNAME`/`DIFF_PASSWORD` - optional basic auth, same both-values rule as everywhere
 
 ```yaml
     environment:
-      VIBE_DIFF_REPO: /app/project
+      VIBE_DIFF_REPO: /app
       DIFF_USERNAME: diff
       DIFF_PASSWORD: change-me
     volumes:
-      - ./project:/app/project
+      - ./:/app
 ```
 
 ### Veronica
@@ -103,7 +114,7 @@ The users live server-side in `${VERONICA_USERS_FILE}` (default `/data/veronica-
 ## Differences from the multi-container stack
 
 - No tools dashboard (`/vibe-dashboard`) and no addon management
-- The upload endpoints of the chat/veronica UIs (`/api/upload*`) are served by a local PHP script (`/app/php/upload-api.php`) and write into the project's `incoming/` directory (instead of the tools container)
+- The upload endpoints of the chat/veronica UIs (`/api/upload*`) are served by a local PHP script (`/opt/vibe/php/upload-api.php`) and write into the project's `incoming/` directory (instead of the tools container)
 - Shells use HTTP basic auth instead of the form login (`vibe-auth` is not included)
 - The opencode backends themselves have no auth - they are protected by the basic auth in front of them
 
@@ -118,12 +129,12 @@ Two variants exist (built from the same Dockerfile via `BASE_IMAGE` build-arg):
 
 ```bash
 # production
-docker build -t jbsnewmedia/vibe4dock-arcvd:1.0.3 .
-docker run --rm -p 8080:80 -e OPENCODE_API_KEY=... jbsnewmedia/vibe4dock-arcvd:1.0.3
+docker build -t jbsnewmedia/vibe4dock-arcvd:1.0.4 .
+docker run --rm -p 8080:80 -e OPENCODE_API_KEY=... jbsnewmedia/vibe4dock-arcvd:1.0.4
 
 # dev variant
 docker build --build-arg BASE_IMAGE=webdevops/php-apache-dev:8.5 --build-arg VARIANT=dev \
-    -t jbsnewmedia/vibe4dock-arcvd:1.0.3-dev .
+    -t jbsnewmedia/vibe4dock-arcvd:1.0.4-dev .
 ```
 
 ## Release (Docker Hub)
@@ -136,9 +147,10 @@ The GitHub Actions workflow `.github/workflows/docker.yml` builds and pushes on 
 | `1.0.0` or `v1.0.0` | `1.0.0`, `1.0`, `latest` | `1.0.0-dev`, `1.0-dev`, `latest-dev` |
 | `1.0.1` or `v1.0.1` | `1.0.1`, `1.0`, `latest` | `1.0.1-dev`, `1.0-dev`, `latest-dev` |
 | `1.0.2` or `v1.0.2` | `1.0.2`, `1.0`, `latest` | `1.0.2-dev`, `1.0-dev`, `latest-dev` |
-| `1.0.3` or `v1.0.3` (current patch release) | `1.0.3`, `1.0`, `latest` | `1.0.3-dev`, `1.0-dev`, `latest-dev` |
+| `1.0.3` or `v1.0.3` | `1.0.3`, `1.0`, `latest` | `1.0.3-dev`, `1.0-dev`, `latest-dev` |
+| `1.0.4` or `v1.0.4` (current patch release) | `1.0.4`, `1.0`, `latest` | `1.0.4-dev`, `1.0-dev`, `latest-dev` |
 
-Release notes per version live in `doc/rls/` (see `1.0.0.md`, `1.0.1.md`, `1.0.2.md`, `1.0.3.md`).
+Release notes per version live in `doc/rls/` (see `1.0.0.md`, `1.0.1.md`, `1.0.2.md`, `1.0.3.md`, `1.0.4.md`).
 
 One-time setup in repo settings -> *Secrets and variables* -> *Actions* -> *New repository secret*:
 

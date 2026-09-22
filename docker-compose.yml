@@ -5,7 +5,7 @@
 
 services:
   vibe4dock:
-    image: jbsnewmedia/vibe4dock-arcvd:1.0.3
+    image: jbsnewmedia/vibe4dock-arcvd:1.0.4
     # build: .            # alternatively build locally
     container_name: arcvd
     ports:
@@ -56,9 +56,10 @@ services:
       SSL_KEY_PATH: ${SSL_KEY_PATH:-}
 
       # --- Vibe-Diff (git working tree UI) ---
-      # Repo path inside the container; default: parent of the webroot (/app).
-      # Mount your project repo (rw for reverts) and point this to it:
-      # VIBE_DIFF_REPO: /app/project
+      # Repo path inside the container. Defaults: /app when a project is
+      # mounted there, otherwise /app/project. With the ./..:/app mount from
+      # above this is /app automatically.
+      # VIBE_DIFF_REPO: /app
       DIFF_USERNAME: ${DIFF_USERNAME:-}
       DIFF_PASSWORD: ${DIFF_PASSWORD:-}
 
@@ -72,7 +73,11 @@ services:
     volumes:
       # Veronica user JSON DB (outside all web roots)
       - ./data:/data
-      # git repo for Vibe-Diff (rw: line/block revert writes to the worktree)
+      # Project repo at /app (neun.app pattern): the agent works here and,
+      # when the repo has a public/ directory, that is served as the web root
+      # at "/". The Vibe4Dock start page stays reachable at /vibe-start.
+      # - ./:/app
+      # ... or the classic variant: repo at /app/project (Vibe-Diff, agent)
       # - ./project:/app/project
       # opencode persistence: settings/auth, sessions, state (models.json)
       - ./opencode/config:/home/application/.config/opencode

@@ -1,10 +1,15 @@
 # jbsnewmedia/vibe4dock-arcvd - all-in-one image
 #
 # One container, one HTTP(S) port:
-#   /                       -> Vibe4Dock start page (PHP via FPM)
+#   /                       -> project web root if the repo mounted at /app has
+#                              a public/ directory, otherwise the start page
 #   /{VIBE_PREFIX}-chat     -> Chat UI + opencode API
 #   /{VIBE_PREFIX}-veronica -> Veronica UI + opencode API + server-side user JSON DB
 #   /{VIBE_PREFIX}-shell-root / -shell-app -> ttyd shells
+#
+# The project repo lives at /app (compose pattern `./:/app`, like neun.app);
+# the agent works there and /app/public is the web root. The image payload
+# itself lives in /opt/vibe so a project mount cannot shadow it.
 #
 # Variants (build-arg):
 #   BASE_IMAGE=webdevops/php-apache:8.5       -> production image
@@ -48,19 +53,19 @@ RUN curl -fsSL https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86
 RUN sudo -u application env HOME=/home/application bash -lc \
         'curl -fsSL https://opencode.ai/install | bash -s --'
 
-# Application payload
-COPY build/www /app/public
-COPY build/chat/www /app/chat-www
-COPY build/veronica/www /app/veronica-www
-COPY build/diff/www /app/diff-www
-COPY build/php /app/php
+# Application payload (lives outside /app so a project repo can be mounted there)
+COPY build/www /opt/vibe/www
+COPY build/chat/www /opt/vibe/chat-www
+COPY build/veronica/www /opt/vibe/veronica-www
+COPY build/diff/www /opt/vibe/diff-www
+COPY build/php /opt/vibe/php
 
 # Process manager + entrypoint (generates all Apache/php-fpm/wrapper config at start)
 COPY supervisord/vibe-supervisord.conf /etc/vibe/supervisord.conf
 COPY entrypoint/vibe-entrypoint.sh /usr/local/bin/vibe-entrypoint.sh
 RUN chmod +x /usr/local/bin/vibe-entrypoint.sh \
-    && mkdir -p /data \
-    && chown application:application /data
+    && mkdir -p /data /app \
+    && chown application:application /data /app
 
 EXPOSE 80 443
 

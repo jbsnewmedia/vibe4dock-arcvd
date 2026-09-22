@@ -1352,6 +1352,30 @@ a:hover { text-decoration: underline; }
     justify-content: center;
     flex-shrink: 0;
 }
+
+/* @-Erwaehnung -> Link auf den Upload-Post */
+a.file-mention {
+    color: var(--primary-dark);
+    background: var(--primary-dim);
+    border-radius: 4px;
+    padding: 0 3px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+a.file-mention:hover { text-decoration: underline; }
+
+/* kurzes Wackeln beim Sprung auf den Upload-Post */
+@keyframes vibe-shake {
+    0%, 100% { transform: translateX(0); }
+    15% { transform: translateX(-7px); }
+    30% { transform: translateX(7px); }
+    45% { transform: translateX(-5px); }
+    60% { transform: translateX(5px); }
+    75% { transform: translateX(-2px); }
+    90% { transform: translateX(2px); }
+}
+.upload-msg-card.shake { animation: vibe-shake 600ms cubic-bezier(0.36, 0.07, 0.19, 0.97); }
 #upload-status .file-info {
     flex: 1;
     min-width: 0;
