@@ -1178,6 +1178,16 @@
     /* ============================================================
        MESSAGE-RENDERING (nur Text – kein Thinking/Tool-Output)
        ============================================================ */
+    function assistantErrorText(err) {
+        if (!err) { return t('errPrefix') + 'API'; }
+        var data = err.data || {};
+        var msg = (data.message && String(data.message)) ||
+                  (err.message && String(err.message)) ||
+                  (data.responseBody && String(data.responseBody)) ||
+                  err.name || 'API';
+        return t('errPrefix') + msg;
+    }
+
     function renderMessage(m) {
         var info = m.info || m;
         var role = info.role || 'user';
@@ -1187,6 +1197,15 @@
         bubble.className = 'bubble';
 
         var hasContent = false;
+
+        if (info.error && role === 'assistant') {
+            /* fehlgeschlagene Assistant-Antwort: Fehler sichtbar im Chat zeigen */
+            var ebox = document.createElement('div');
+            ebox.className = 'assistant-error';
+            ebox.textContent = assistantErrorText(info.error);
+            bubble.appendChild(ebox);
+            hasContent = true;
+        }
 
         for (var i = 0; i < parts.length; i++) {
             var p = parts[i];
@@ -2006,8 +2025,10 @@
         var body = { parts: [{ type: 'text', text: text }] };
         var pref = preferredModel();
         if (pref) {
-            body.providerID = pref.providerID;
-            body.modelID = pref.modelID;
+            /* opencode v2 API erwartet das Modell verschachtelt */
+            body.model = { providerID: pref.providerID, modelID: pref.modelID };
+            var goVariant = modelVariantFor(pref);
+            if (goVariant) { body.variant = goVariant; }
         }
         if (window.CHAT_CONFIG && window.CHAT_CONFIG.agent) {
             body.agent = window.CHAT_CONFIG.agent;
@@ -2226,7 +2247,13 @@
     /* ---------- model selection (chat menu, sources: opencode /config/providers
        + models.json) ---------- */
     var modelGroups = [];
+    var modelVariants = {};
     var modelMenuLoading = false;
+
+    function modelVariantFor(pref) {
+        if (!pref) { return null; }
+        return modelVariants[pref.providerID + '/' + pref.modelID] || null;
+    }
 
     function activeModelKey() {
         var saved = storageGet(MODEL_KEY);
@@ -2329,33 +2356,22 @@
             var stateKeys = function (list) {
                 return (Array.isArray(list) ? list : [])
                     .map(function (x) { return x && x.providerID && x.modelID ? x.providerID + '/' + x.modelID : null; })
-                    .filter(function (k, i, a) { return k && a.indexOf(k) === i; });
-            };
-            /* favorites/recent from providers that /config/providers does not
-               (yet) list must not disappear: synthesize the entry. */
-            var toEntry = function (k) {
-                if (known[k]) { return known[k]; }
-                var i = k.indexOf('/');
-                return {
-                    key: k,
-                    label: i > 0 ? k.slice(i + 1) : k,
-                    prov: i > 0 ? k.slice(0, i) : 'opencode',
-                    def: false,
-                    zen: false,
-                    ghost: true
-                };
+                    /* wie im Chat: nur Modelle anbieten, die /config/providers kennt
+                       (keine Ghost-Einträge mit Roh-IDs) */
+                    .filter(function (k, i, a) { return k && known[k] && a.indexOf(k) === i; });
             };
             return fetch(location.origin + BASE + 'models.json', { cache: 'no-store' })
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .catch(function () { return null; })
                 .then(function (local) {
+                    modelVariants = (local && local.variant) || {};
                     var fav = stateKeys(local && local.favorite);
                     var rec = stateKeys(local && local.recent);
                     var groups = [];
                     if (fav.length) {
-                        groups.push({ label: t('modelsFav'), keys: fav.map(toEntry) });
+                        groups.push({ label: t('modelsFav'), keys: fav.map(function (k) { return known[k]; }) });
                     } else if (rec.length) {
-                        groups.push({ label: t('modelsRecent'), keys: rec.map(toEntry) });
+                        groups.push({ label: t('modelsRecent'), keys: rec.map(function (k) { return known[k]; }) });
                     } else {
                         var zen = Object.keys(known).filter(function (k) { return known[k].zen; });
                         if (zen.length) {
@@ -2535,8 +2551,10 @@
                 var body = { parts: [{ type: 'text', text: text }] };
                 var pref = preferredModel();
                 if (pref) {
-                    body.providerID = pref.providerID;
-                    body.modelID = pref.modelID;
+                    /* opencode v2 API erwartet das Modell verschachtelt */
+                    body.model = { providerID: pref.providerID, modelID: pref.modelID };
+                    var prefVariant = modelVariantFor(pref);
+                    if (prefVariant) { body.variant = prefVariant; }
                 }
                 if (state.planMode) {
                     /* plan mode internally: Veronica's own persona with

@@ -93,6 +93,12 @@
     var MODEL_STORAGE_KEY = 'vibe4dock.chat.model';
     var INTERNAL_AGENTS = ['compaction', 'summary', 'title'];
     var STUCK_POLLS = 40;
+    var modelVariants = {};
+
+    function modelVariantFor(pref) {
+        if (!pref) { return null; }
+        return modelVariants[pref.providerID + '/' + pref.modelID] || null;
+    }
 
     function storageGet(key) {
         try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -283,7 +289,10 @@
             };
             fetch(location.origin + BASE + 'models.json', { cache: 'no-store' })
                 .then(function (r) { return r.ok ? r.json() : null; })
-                .then(function (local) { finish(local || null); })
+                .then(function (local) {
+                    modelVariants = (local && local.variant) || {};
+                    finish(local || null);
+                })
                 .catch(function () { finish(null); });
         }).catch(function () {
             /* kalter opencode-Start: providers-Call kann (noch) leer/fehlerhaft sein */
@@ -1017,8 +1026,10 @@
         var body = { parts: [{ type: 'text', text: text }] };
         var pref = preferredModel();
         if (pref) {
-            body.providerID = pref.providerID;
-            body.modelID = pref.modelID;
+            /* opencode v2 API erwartet das Modell verschachtelt */
+            body.model = { providerID: pref.providerID, modelID: pref.modelID };
+            var variant = modelVariantFor(pref);
+            if (variant) { body.variant = variant; }
         }
         var agent = el.agentSelect && el.agentSelect.value;
         if (agent) { body.agent = agent; }

@@ -680,6 +680,16 @@ a:hover { text-decoration: underline; }
     color: var(--chat-text);
     border-top-left-radius: 4px;
 }
+.assistant-error {
+    color: #b91c1c;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-size: 14px;
+    word-break: break-word;
+}
 .bubble:hover { transform: translateY(-1px); }
 
 .bubble p:first-child { margin-top: 0; }
