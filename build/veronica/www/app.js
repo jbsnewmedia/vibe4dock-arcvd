@@ -1198,8 +1198,9 @@
 
         var hasContent = false;
 
-        if (info.error && role === 'assistant') {
-            /* fehlgeschlagene Assistant-Antwort: Fehler sichtbar im Chat zeigen */
+        if (info.error && role === 'assistant' && info.error.name !== 'MessageAbortedError') {
+            /* fehlgeschlagene Assistant-Antwort: Fehler sichtbar im Chat zeigen
+               (Abbruch zählt nicht als Fehler) */
             var ebox = document.createElement('div');
             ebox.className = 'assistant-error';
             ebox.textContent = assistantErrorText(info.error);
