@@ -175,12 +175,19 @@ export VIBE_DIFF_REPO="${VIBE_DIFF_REPO:-${PROJECT_DIR:-/app/project}}"
 # ----------------------------------------------------------------------------
 ASSET_V="$(date +%s)"
 
+# Stuck-dialog threshold in minutes without any stream progress (default 10).
+STUCK_MINUTES="${STUCK_MINUTES:-10}"
+case "${STUCK_MINUTES}" in
+    ''|*[!0-9]*) STUCK_MINUTES="10" ;;
+esac
+
 cat > "$CHAT_WWW/config.js" <<CFG
 window.CHAT_CONFIG = {
     vibeName: "${VIBE_NAME}",
     provider: "$(resolve_chat_provider)",
     model: "$(resolve_chat_model)",
-    agent: "$(resolve_chat_agent)"
+    agent: "$(resolve_chat_agent)",
+    stuckMinutes: "${STUCK_MINUTES}"
 };
 CFG
 sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/config.js/config.js?v=${ASSET_V}/; s/i18n.js/i18n.js?v=${ASSET_V}/; s/md.js/md.js?v=${ASSET_V}/" "$CHAT_WWW/index.html"
@@ -196,7 +203,8 @@ window.CHAT_CONFIG = {
     provider: "$(resolve_vero_provider)",
     model: "$(resolve_vero_model)",
     agent: "$(resolve_vero_agent)",
-    allowRegistration: "${ALLOW_REGISTRATION}"
+    allowRegistration: "${ALLOW_REGISTRATION}",
+    stuckMinutes: "${STUCK_MINUTES}"
 };
 CFG
 sed -i "s/app.js/app.js?v=${ASSET_V}/; s/style.css/style.css?v=${ASSET_V}/; s/config.js/config.js?v=${ASSET_V}/; s/i18n.js/i18n.js?v=${ASSET_V}/; s/md.js/md.js?v=${ASSET_V}/" "$VERONICA_WWW/index.html"

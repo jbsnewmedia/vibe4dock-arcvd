@@ -86,7 +86,8 @@
     var AGENT_STORAGE_KEY = "vibe4dock.chat.agent";
     var MODEL_STORAGE_KEY = "vibe4dock.chat.model";
     var INTERNAL_AGENTS = [ "compaction", "summary", "title" ];
-    var STUCK_POLLS = 40;
+    var STUCK_MINUTES = (window.CHAT_CONFIG && window.CHAT_CONFIG.stuckMinutes) || 10;
+    var STUCK_POLLS = Math.max(1, Math.round(STUCK_MINUTES * 60000 / 1500));
     var modelVariants = {};
     function modelVariantFor(pref) {
         if (!pref) {

@@ -97,6 +97,7 @@ Browser UI for the git repo behind the code: current branch, branch list (with c
 ### Veronica
 
 - **Plan mode toggle** - the header toggle sends a kickoff prompt with opencode's `plan` agent (`agent: 'plan'`) directly into the session; while on, every message from the send button runs in plan mode. State persists across reloads
+- `STUCK_MINUTES` - minutes without any stream progress before Chat/Veronica show the "stuck" dialog (default `10`)
 - `VERONICA_ALLOW_REGISTRATION` - registration in the UI (`1`/`0`)
 - `VERONICA_BOOTSTRAP_ADMIN` + `VERONICA_BOOTSTRAP_ADMIN_PIN_HASH` - admin seed, **only on first start** (when the JSON DB does not exist yet)
 - `VERONICA_BOOTSTRAP_USERS` - optional extra users `"alias:sha256:...,alias:sha256:..."`

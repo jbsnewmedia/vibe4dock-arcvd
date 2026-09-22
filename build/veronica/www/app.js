@@ -12,7 +12,8 @@
     var MODEL_KEY = "vibe4dock.veronica.model";
     var PLAN_KEY = "vibe4dock.veronica.planmode";
     var UPLOADS_KEY = "vibe4dock.veronica.uploads.";
-    var STUCK_POLLS = 40;
+    var STUCK_MINUTES = (window.CHAT_CONFIG && window.CHAT_CONFIG.stuckMinutes) || 10;
+    var STUCK_POLLS = Math.max(1, Math.round(STUCK_MINUTES * 60000 / 1500));
     var state = {
         user: null,
         planMode: storageGet(PLAN_KEY) === "1",
