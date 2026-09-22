@@ -2358,7 +2358,16 @@
                         groups.push({ label: t('modelsRecent'), keys: rec.map(toEntry) });
                     } else {
                         var zen = Object.keys(known).filter(function (k) { return known[k].zen; });
-                        groups.push({ label: zen.length ? t('modelsRec') : t('modelsAll'), keys: zen.length ? zen.map(function (k) { return known[k]; }) : Object.keys(known).map(function (k) { return known[k]; }) });
+                        if (zen.length) {
+                            groups.push({ label: t('modelsRec'), keys: zen.map(function (k) { return known[k]; }) });
+                        }
+                        var rest = Object.keys(known).filter(function (k) { return !known[k].zen; });
+                        if (rest.length) {
+                            groups.push({ label: t('modelsAll'), keys: rest.map(function (k) { return known[k]; }) });
+                        }
+                        if (!groups.length) {
+                            groups.push({ label: t('modelsAll'), keys: Object.keys(known).map(function (k) { return known[k]; }) });
+                        }
                     }
                     modelGroups = groups;
                     renderModelMenu();
