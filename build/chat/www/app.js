@@ -399,6 +399,12 @@
         var thinking = null;
         var thinkingBody = null;
         var thinkingCount = 0;
+        if (info.error && role === "assistant" && info.error.name !== "MessageAbortedError") {
+            var ebox = document.createElement("div");
+            ebox.className = "assistant-error";
+            ebox.textContent = assistantErrorText(info.error);
+            answer.appendChild(ebox);
+        }
         for (var i = 0; i < parts.length; i++) {
             var p = parts[i];
             if (p.type === "text" && p.text) {
@@ -441,6 +447,20 @@
             wrap.appendChild(answer);
         }
         return wrap;
+    }
+    function assistantErrorText(err) {
+        if (!err) {
+            return t("errPrefix") + "API";
+        }
+        var data = err.data || {};
+        var raw = [ data.message, err.message, data.responseBody, err.name ].map(function(v) {
+            return v == null ? "" : String(v);
+        }).join(" ");
+        if (/FreeTierError|free tier/i.test(raw)) {
+            return t("errPrefix") + t("freeTierHint");
+        }
+        var msg = data.message && String(data.message) || err.message && String(err.message) || data.responseBody && String(data.responseBody) || err.name || "API";
+        return t("errPrefix") + msg;
     }
     function isComplete(m) {
         var info = m.info || m;

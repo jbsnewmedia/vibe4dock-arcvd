@@ -1187,6 +1187,12 @@
             return t("errPrefix") + "API";
         }
         var data = err.data || {};
+        var raw = [ data.message, err.message, data.responseBody, err.name ].map(function(v) {
+            return v == null ? "" : String(v);
+        }).join(" ");
+        if (/FreeTierError|free tier/i.test(raw)) {
+            return t("errPrefix") + t("freeTierHint");
+        }
         var msg = data.message && String(data.message) || err.message && String(err.message) || data.responseBody && String(data.responseBody) || err.name || "API";
         return t("errPrefix") + msg;
     }
@@ -2216,6 +2222,11 @@
         if (saved) {
             var i = saved.indexOf("/");
             if (i > 0) {
+                if (Object.keys(knownModels).length && !knownModels[saved]) {
+                    storageDel(MODEL_KEY);
+                    appendNotice(t("modelMissing").replace("{model}", saved));
+                    return null;
+                }
                 return {
                     providerID: saved.slice(0, i),
                     modelID: saved.slice(i + 1)
@@ -2230,6 +2241,7 @@
         }
         return null;
     }
+    var knownModels = {};
     var modelGroups = [];
     var modelVariants = {};
     var modelMenuLoading = false;
@@ -2341,6 +2353,7 @@
                     };
                 });
             });
+            knownModels = known;
             var stateKeys = function(list) {
                 return (Array.isArray(list) ? list : []).map(function(x) {
                     return x && x.providerID && x.modelID ? x.providerID + "/" + x.modelID : null;

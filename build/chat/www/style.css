@@ -125,6 +125,17 @@ body::before {
 
 .msg.assistant .bubble { padding: 2px 6px 2px 10px; line-height: 1.6; word-wrap: break-word; border-left: 2px solid var(--text-dim); }
 
+.assistant-error {
+    color: #b91c1c;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-size: 14px;
+    word-break: break-word;
+}
+
 .bubble pre {
     background: var(--bg-black);
     padding: 14px 16px;
