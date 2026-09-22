@@ -135,7 +135,10 @@ fi
 # ----------------------------------------------------------------------------
 PROJECT_DIR="${VIBE_PROJECT_DIR:-}"
 if [ -z "$PROJECT_DIR" ]; then
-    if [ -e /app/composer.json ] || [ -e /app/.git ] || [ -e /app/package.json ] || [ -d /app/public ]; then
+    if mountpoint -q /app 2>/dev/null || grep -qs " /app " /proc/mounts; then
+        # /app ist ein Bind-Mount - es ist das Projekt (auch wenn noch leer)
+        PROJECT_DIR="/app"
+    elif [ -e /app/composer.json ] || [ -e /app/.git ] || [ -e /app/package.json ] || [ -d /app/public ]; then
         PROJECT_DIR="/app"
     elif [ -d /app/project ]; then
         PROJECT_DIR="/app/project"
@@ -143,7 +146,27 @@ if [ -z "$PROJECT_DIR" ]; then
 fi
 PROJECT_DIR="${PROJECT_DIR%/}"
 if [ -z "$WEB_ROOT" ]; then
-    if [ -n "$PROJECT_DIR" ] && [ -d "$PROJECT_DIR/public" ]; then
+    if [ -n "$PROJECT_DIR" ]; then
+        # public/ immer anlegen (auch bei leerem Projekt) + Starter-Seite, damit
+        # der Docroot von Anfang an bedient und der Agent hineinschreiben kann
+        mkdir -p "$PROJECT_DIR/public"
+        chown application:application "$PROJECT_DIR" "$PROJECT_DIR/public" 2>/dev/null || true
+        if [ ! -e "$PROJECT_DIR/public/index.html" ] && [ ! -e "$PROJECT_DIR/public/index.php" ]; then
+            cat > "$PROJECT_DIR/public/index.html" <<'INDEX'
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>New project</title>
+</head>
+<body>
+    <h1>New project</h1>
+    <p>This is the web root (<code>public/</code>) of your project. Ask Veronica to fill it with content.</p>
+</body>
+</html>
+INDEX
+        fi
         WEB_ROOT="$PROJECT_DIR/public"
     else
         WEB_ROOT="$VIBE_HOME/www"
