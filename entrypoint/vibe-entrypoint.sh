@@ -147,26 +147,19 @@ fi
 PROJECT_DIR="${PROJECT_DIR%/}"
 if [ -z "$WEB_ROOT" ]; then
     if [ -n "$PROJECT_DIR" ]; then
-        # public/ immer anlegen (auch bei leerem Projekt) + Starter-Seite, damit
-        # der Docroot von Anfang an bedient und der Agent hineinschreiben kann
+        # public/ immer anlegen (auch bei leerem Projekt) und mit der
+        # Vibe4Dock-Startseite vorbelegen - / zeigt damit die gewohnte
+        # Uebersicht, bis der Agent eine eigene index.php/index.html baut
+        # (DirectoryIndex bevorzugt index.php; beides ueberschreibt den
+        # Platzhalter ohne Neustart). /vibe-start bleibt zusaetzlich da.
         mkdir -p "$PROJECT_DIR/public"
-        chown application:application "$PROJECT_DIR" "$PROJECT_DIR/public" 2>/dev/null || true
-        if [ ! -e "$PROJECT_DIR/public/index.html" ] && [ ! -e "$PROJECT_DIR/public/index.php" ]; then
-            cat > "$PROJECT_DIR/public/index.html" <<'INDEX'
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>New project</title>
-</head>
-<body>
-    <h1>New project</h1>
-    <p>This is the web root (<code>public/</code>) of your project. Ask Veronica to fill it with content.</p>
-</body>
-</html>
-INDEX
+        if [ ! -e "$PROJECT_DIR/public/index.php" ] && [ ! -e "$PROJECT_DIR/public/index.html" ]; then
+            cp "$VIBE_HOME/www/index.php" "$VIBE_HOME/www/favicon.png" \
+               "$VIBE_HOME/www/favicon.ico" "$VIBE_HOME/www/logo.svg" \
+               "$VIBE_HOME/www/robots.txt" "$PROJECT_DIR/public/" 2>/dev/null || true
         fi
+        chown -R application:application "$PROJECT_DIR/public" 2>/dev/null || true
+        chown application:application "$PROJECT_DIR" 2>/dev/null || true
         WEB_ROOT="$PROJECT_DIR/public"
     else
         WEB_ROOT="$VIBE_HOME/www"
