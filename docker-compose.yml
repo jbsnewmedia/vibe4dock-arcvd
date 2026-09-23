@@ -5,7 +5,7 @@
 
 services:
   vibe4dock:
-    image: jbsnewmedia/vibe4dock-arcvd:1.0.5
+    image: jbsnewmedia/vibe4dock-arcvd:1.0.6
     # build: .            # alternatively build locally
     container_name: ${CONTAINER_NAME:-arcvd}
     ports:
