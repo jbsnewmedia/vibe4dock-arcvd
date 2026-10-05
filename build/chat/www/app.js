@@ -11,6 +11,7 @@
         commands: [],
         generating: false,
         lastRendered: null,
+        lastSessionSig: null,
         pendingQuestions: [],
         pendingPermissions: [],
         lastPendingSig: null,
@@ -39,6 +40,13 @@
         questionModalBody: document.getElementById("question-modal-body"),
         questionModalCount: document.getElementById("question-modal-count"),
         questionModalClose: document.getElementById("question-modal-close"),
+        diffBtn: document.getElementById("diff-btn"),
+        compactBtn: document.getElementById("compact-btn"),
+        forkBtn: document.getElementById("fork-btn"),
+        sessionMeta: document.getElementById("session-meta"),
+        diffModal: document.getElementById("diff-modal"),
+        diffModalBody: document.getElementById("diff-modal-body"),
+        diffModalClose: document.getElementById("diff-modal-close"),
         working: document.getElementById("working"),
         attachBtn: document.getElementById("attach-btn"),
         fileInput: document.getElementById("file-input"),
@@ -80,6 +88,238 @@
             return ct.indexOf("json") !== -1 ? r.json() : r.text();
         });
     }
+    // ---- OpenCode v2 API-Adapter ------------------------------------------------
+    // v2 listet Responses unter { data: [...] } und liefert flache, getypte
+    // Messages (user: text-Feld, assistant: content[] statt parts[]). Die
+    // Renderer bleiben auf der gewohnten [{info, parts}]-Form.
+    function unwrap(res) {
+        return res && typeof res === "object" && res.data !== undefined ? res.data : res;
+    }
+    function toolOutput(st) {
+        if (!st) {
+            return "";
+        }
+        var out = "";
+        (st.content || []).forEach(function(c) {
+            if (c && typeof c.text === "string") {
+                out += (out ? "\n" : "") + c.text;
+            }
+        });
+        if (!out && st.metadata && typeof st.metadata.output === "string") {
+            out = st.metadata.output;
+        }
+        return out;
+    }
+    function mapContent(c) {
+        var st = c.state || {};
+        var status = st.status === "completed" || st.status === "error" ? st.status : "pending";
+        return {
+            type: "tool",
+            tool: c.name || "tool",
+            callID: c.id,
+            state: {
+                status: status,
+                input: st.input || {},
+                output: toolOutput(st),
+                metadata: st.metadata || {}
+            }
+        };
+    }
+    function v2Messages(list) {
+        var out = [];
+        (list || []).forEach(function(m) {
+            if (!m || typeof m !== "object") {
+                return;
+            }
+            var created = m.time && m.time.created || 0;
+            if (m.type === "user") {
+                out.push({
+                    info: {
+                        id: m.id,
+                        role: "user",
+                        sessionID: m.sessionID,
+                        time: {
+                            created: created
+                        }
+                    },
+                    parts: [ {
+                        type: "text",
+                        text: m.text || ""
+                    } ]
+                });
+            } else if (m.type === "assistant") {
+                var parts = [];
+                (m.content || []).forEach(function(c) {
+                    if (!c) {
+                        return;
+                    }
+                    if (c.type === "text" || c.type === "reasoning") {
+                        parts.push({
+                            type: c.type,
+                            text: c.text || ""
+                        });
+                    } else if (c.type === "tool") {
+                        parts.push(mapContent(c));
+                    } else if (c.type === "subtask" && c.prompt) {
+                        parts.push(c);
+                    }
+                });
+                out.push({
+                    info: {
+                        id: m.id,
+                        role: "assistant",
+                        agent: m.agent,
+                        sessionID: m.sessionID,
+                        time: {
+                            created: created,
+                            completed: m.time && m.time.completed
+                        },
+                        error: m.error || null
+                    },
+                    parts: parts
+                });
+            }
+            // uebrige v2-Typen (idle, agent-switched, model-switched, ...) ausblenden
+        });
+        out.sort(function(a, b) {
+            return ((a.info.time || {}).created || 0) - ((b.info.time || {}).created || 0);
+        });
+        return out;
+    }
+    function fetchAllMessages(sid) {
+        var collected = [];
+        var seen = {};
+        function page(cursor, depth) {
+            // v2: Cursor-Seiten ohne "order" kombinieren (API: "Do not combine")
+            var url = "/session/" + encodeURIComponent(sid) + "/message?limit=200" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "&order=asc");
+            return api("GET", url).then(function(res) {
+                var list = (res && res.data) || [];
+                list.forEach(function(m) {
+                    if (m && m.id && !seen[m.id]) {
+                        seen[m.id] = 1;
+                        collected.push(m);
+                    }
+                });
+                var next = res && res.cursor && res.cursor.next;
+                if (next && list.length && collected.length < 2000 && depth < 40) {
+                    return page(next, depth + 1).catch(function() {
+                        return collected;
+                    });
+                }
+                return collected;
+            });
+        }
+        return page(null, 0).then(v2Messages);
+    }
+    // Model/Agent-Auswahl gilt in v2 pro Session (vor dem Prompt setzen).
+    function applySessionPrefs(sid) {
+        var jobs = [];
+        var pref = preferredModel();
+        if (pref && pref.providerID && pref.modelID) {
+            var ref = {
+                providerID: pref.providerID,
+                id: pref.modelID
+            };
+            var variant = modelVariantFor(pref);
+            if (variant) {
+                ref.variant = variant;
+            }
+            jobs.push(api("POST", "/session/" + sid + "/model", {
+                model: ref
+            }));
+        }
+        var agent = el.agentSelect && el.agentSelect.value;
+        if (agent) {
+            jobs.push(api("POST", "/session/" + sid + "/agent", {
+                agent: agent
+            }));
+        }
+        return Promise.all(jobs).catch(function() {});
+    }
+    // Permission.Request (v2) in lesbare Anzeige aufschluesseln: action,
+    // resources, message, metadata oder der referenzierte Tool-Call
+    // (source.messageID + source.id) aus den gepolten Messages.
+    function permInfo(p) {
+        var act = p.action || "";
+        var input = null;
+        var md = p.metadata;
+        if (md && typeof md === "object") {
+            input = md.input || md.tool_input || null;
+            if (!input && (md.command || md.file_path || md.path || md.url || md.pattern)) {
+                input = md;
+            }
+        }
+        if (!input && p.source && p.source.type === "tool" && p.source.messageID && p.source.id) {
+            var msgs = state.lastMsgs || [];
+            for (var i = 0; i < msgs.length; i++) {
+                var m = msgs[i];
+                var mid = m.info && m.info.id || m.id;
+                if (mid !== p.source.messageID) {
+                    continue;
+                }
+                var parts = m.parts || [];
+                for (var j = 0; j < parts.length; j++) {
+                    var pt = parts[j];
+                    if (pt.type === "tool" && (pt.callID === p.source.id || pt.id === p.source.id)) {
+                        input = pt.state && pt.state.input || null;
+                    }
+                }
+            }
+        }
+        var what = "";
+        if (input && typeof input === "object") {
+            what = input.command || input.cmd || input.file_path || input.filePath || input.path || input.url || input.pattern || input.query || "";
+        } else if (typeof input === "string") {
+            what = input;
+        }
+        var res = (p.resources || []).join(", ");
+        var label = (p.message || "").trim();
+        if (!label && what) {
+            label = act ? act + ": " + what : what;
+        }
+        if (!label && res) {
+            label = act ? act + ": " + res : res;
+        }
+        if (!label) {
+            label = act || "aktion";
+        }
+        var meta = [];
+        if (res && (what || "").indexOf(res) === -1 && label.indexOf(res) === -1) {
+            meta.push(res);
+        }
+        if (input && typeof input === "object" && input.description && label.indexOf(input.description) === -1) {
+            meta.push(input.description);
+        }
+        return {
+            title: label,
+            meta: meta
+        };
+    }
+    // Form.Info (v2) -> Frage-Request in der gewohnten Form.
+    function formToReq(f) {        return {
+            id: f.id,
+            sessionID: f.sessionID,
+            form: true,
+            questions: (f.fields || []).filter(function(fd) {
+                return fd && !fd.hidden && fd.type !== "external";
+            }).map(function(fd) {
+                return {
+                    key: fd.key,
+                    type: fd.type,
+                    header: f.title || "",
+                    question: fd.title || fd.description || t("question"),
+                    options: (fd.options || []).map(function(o) {
+                        return typeof o === "string" ? o : {
+                            label: o.label || o.value || "",
+                            value: o.value || o.label || "",
+                            description: o.description
+                        };
+                    })
+                };
+            })
+        };
+    }
+
     function esc(s) {
         return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }
@@ -170,52 +410,92 @@
             showStuck();
         }
     }
+    var loadAgentsAttempt = 0;
+    // ---- Live-Events (v2 SSE) + Fallback-Polling --------------------------------
+    var sseState = {
+        last: 0,
+        ok: false
+    };
+    var refreshTimer = null;
+    function scheduleRefresh() {
+        if (refreshTimer) {
+            return;
+        }
+        refreshTimer = setTimeout(function() {
+            refreshTimer = null;
+            refresh();
+        }, 250);
+    }
+    function startEvents() {
+        if (typeof EventSource === "undefined") {
+            return;
+        }
+        try {
+            var es = new EventSource(API_BASE + "/event");
+            es.onopen = function() {
+                sseState.ok = true;
+            };
+            es.onerror = function() {
+                sseState.ok = false;
+            };
+            es.onmessage = function() {
+                sseState.last = Date.now();
+                scheduleRefresh();
+            };
+        } catch (e) {}
+    }
     function loadAgents() {
         if (!el.agentSelect) {
             return;
-        }
-        api("GET", "/agent").then(function(agents) {
-            var usable = (agents || []).filter(function(a) {
-                return a && a.mode === "primary" && !a.hidden && INTERNAL_AGENTS.indexOf(a.name) === -1;
+        }        api("GET", "/agent").then(function(res) {
+            var agents = unwrap(res) || [];
+            var usable = agents.filter(function(a) {
+                return a && a.mode === "primary" && !a.hidden && INTERNAL_AGENTS.indexOf(a.name) === -1 && INTERNAL_AGENTS.indexOf(a.id) === -1;
             });
             if (!usable.length) {
-                return;
+                throw new Error("no agents");
             }
             usable.sort(function(a, b) {
-                if (a.name === "build") {
+                if (a.id === "build") {
                     return -1;
                 }
-                if (b.name === "build") {
+                if (b.id === "build") {
                     return 1;
                 }
                 return a.name.localeCompare(b.name);
             });
             var preferred = preferredAgent();
             var hasPreferred = usable.some(function(a) {
-                return a.name === preferred;
+                return a.id === preferred || a.name === preferred;
             });
             if (!hasPreferred) {
-                preferred = usable[0].name;
+                preferred = usable[0].id;
             }
             el.agentSelect.innerHTML = "";
             usable.forEach(function(a) {
                 var opt = document.createElement("option");
-                opt.value = a.name;
-                opt.textContent = a.name;
+                opt.value = a.id;
+                opt.textContent = a.name || a.id;
                 if (a.description) {
                     opt.title = a.description;
                 }
                 el.agentSelect.appendChild(opt);
             });
             el.agentSelect.value = preferred;
-        }).catch(function() {});
+        }).catch(function(e) {
+            // v2 laedt Agenten (wie Modelle) traegsich - kurz weiterprobieren
+            loadAgentsAttempt = (loadAgentsAttempt || 0) + 1;
+            if (loadAgentsAttempt < 6) {
+                setTimeout(loadAgents, 2500);
+            }
+        });
     }
     function loadCommands() {
         if (!el.cmdPopup) {
             return Promise.resolve();
         }
-        return api("GET", "/command").then(function(list) {
-            state.commands = (list || []).filter(function(c) {
+        return api("GET", "/command").then(function(res) {
+            state.commands = (unwrap(res) || []).filter(function(c) {
                 return c && c.name;
             }).sort(function(a, b) {
                 return a.name.localeCompare(b.name);
@@ -246,25 +526,50 @@
             return Promise.resolve();
         }
         var tryN = attempt || 0;
-        return api("GET", "/config/providers").then(function(res) {
-            var providers = res && res.providers || [];
-            var defaults = res && res.default || {};
+        return Promise.all([
+            api("GET", "/model"),
+            api("GET", "/provider").catch(function() {
+                return null;
+            }),
+            api("GET", "/model/default").catch(function() {
+                return null;
+            })
+        ]).then(function(results) {
+            var models = unwrap(results[0]) || [];
+            var provNames = {};
+            ((results[1] && unwrap(results[1])) || []).forEach(function(p) {
+                if (p && p.id) {
+                    provNames[p.id] = p.name || p.id;
+                }
+            });
+            var defaults = {};
+            var dm = results[2] && unwrap(results[2]);
+            if (dm && dm.providerID && dm.modelID) {
+                defaults[dm.providerID] = dm.modelID;
+            }
+            var known = {};
+            var providerSeen = {};
+            models.forEach(function(m) {
+                if (!m || !m.providerID || !m.modelID) {
+                    return;
+                }
+                providerSeen[m.providerID] = provNames[m.providerID] || m.providerID;
+                known[m.providerID + "/" + m.modelID] = {
+                    label: m.name || m.modelID,
+                    prov: providerSeen[m.providerID],
+                    def: defaults[m.providerID] === m.modelID,
+                    zen: m.providerID === "opencode"
+                };
+            });
+            var providers = Object.keys(providerSeen).map(function(pid) {
+                return {
+                    id: pid,
+                    name: providerSeen[pid]
+                };
+            });
             if (!providers.length) {
                 throw new Error("no providers");
             }
-            var known = {};
-            providers.forEach(function(p) {
-                var models = p.models || {};
-                Object.keys(models).forEach(function(mid) {
-                    var m = models[mid] || {};
-                    known[p.id + "/" + (m.id || mid)] = {
-                        label: m.name || m.id || mid,
-                        prov: p.name || p.id,
-                        def: defaults[p.id] === (m.id || mid),
-                        zen: p.id === "opencode"
-                    };
-                });
-            });
             var stateKeys = function(list) {
                 return (Array.isArray(list) ? list : []).map(function(x) {
                     return x && x.providerID && x.modelID ? x.providerID + "/" + x.modelID : null;
@@ -339,7 +644,7 @@
                 finish(null);
             });
         }).catch(function() {
-            if (tryN < 2) {
+            if (tryN < 6) {
                 return new Promise(function(r) {
                     setTimeout(r, 2500);
                 }).then(function() {
@@ -452,14 +757,15 @@
         if (!err) {
             return t("errPrefix") + "API";
         }
-        var data = err.data || {};
-        var raw = [ data.message, err.message, data.responseBody, err.name ].map(function(v) {
+        // v2: { type, message, status?, response: { body } } - aelteres Format mitlesen
+        var data = err.data || err.response || {};
+        var raw = [ err.message, data.message, err.type, data.response && data.response.body, data.responseBody, err.name ].map(function(v) {
             return v == null ? "" : String(v);
         }).join(" ");
         if (/FreeTierError|free tier/i.test(raw)) {
             return t("errPrefix") + t("freeTierHint");
         }
-        var msg = data.message && String(data.message) || err.message && String(err.message) || data.responseBody && String(data.responseBody) || err.name || "API";
+        var msg = err.message && String(err.message) || data.message && String(data.message) || data.response && data.response.body && String(data.response.body) || data.responseBody && String(data.responseBody) || err.type || err.name || "API";
         return t("errPrefix") + msg;
     }
     function isComplete(m) {
@@ -588,7 +894,8 @@
                                 if (pickedBtn) {
                                     pickedBtn.classList.remove("btn-primary");
                                 }
-                                picked = label;
+                                // v2-Forms erwarten den Options-Value, Recovery den Text
+                                picked = typeof o === "object" && o && o.value ? o.value : label;
                                 pickedBtn = b;
                                 b.classList.add("btn-primary");
                                 errors[qIdx].hidden = true;
@@ -678,6 +985,12 @@
             title.className = "q";
             title.textContent = t("permPrefix") + (p.title || p.type || t("permAction"));
             box.appendChild(title);
+            (p.meta || []).forEach(function(line) {
+                var meta = document.createElement("div");
+                meta.className = "q-meta";
+                meta.textContent = line;
+                box.appendChild(meta);
+            });
             var opts = document.createElement("div");
             opts.className = "opts";
             [ [ "once", t("permAllow") ], [ "always", t("permAlways") ], [ "reject", t("permDeny") ] ].forEach(function(pair) {
@@ -734,9 +1047,6 @@
         }
     }
     function answerQuestion(req, payload) {
-        var reply = api("POST", "/question/" + encodeURIComponent(req.id || req.requestID) + "/reply", {
-            answers: payload
-        });
         var done = function() {
             state.replyError = "";
             return refresh();
@@ -745,25 +1055,43 @@
             state.replyError = "Could not send answer: " + e.message;
             renderPending();
         };
+        if (req.form) {
+            // v2: strukturierte Form-Antwort { answer: { fieldKey: value } }
+            var sid = req.sessionID || state.sessionId;
+            var answer = {};
+            (req.questions || []).forEach(function(q, i) {
+                if (!q || !q.key) {
+                    return;
+                }
+                var vals = payload[i] || [];
+                if (q.type === "multiselect") {
+                    answer[q.key] = vals;
+                } else {
+                    answer[q.key] = vals.length ? vals[0] : "";
+                }
+            });
+            api("POST", "/session/" + encodeURIComponent(sid) + "/form/" + encodeURIComponent(req.id) + "/reply", {
+                answer: answer
+            }).then(done).catch(fail);
+            return;
+        }
         if (req.recovered) {
-            var sid = state.sessionId;
             var text = payload.map(function(vals, i) {
                 var qs = (req.questions || [])[i] || {};
                 return (qs.header ? qs.header + ": " : "") + (vals.join(", ") || "(keine Angabe)");
             }).join("\n");
-            api("POST", "/session/" + sid + "/prompt_async", {
-                parts: [ {
-                    type: "text",
-                    text: text
-                } ]
+            api("POST", "/session/" + encodeURIComponent(state.sessionId) + "/prompt", {
+                text: text
             }).then(done).catch(fail);
             return;
         }
-        reply.then(done).catch(fail);
+        // Nicht-Form-, nicht-recovered-Requests gibt es in v2 nicht mehr.
+        done();
     }
-    function answerPermission(p, reply) {
-        api("POST", "/permission/" + encodeURIComponent(p.id || p.permissionID) + "/reply", {
-            reply: reply
+    function answerPermission(p, replyValue) {
+        var sid = p.sessionID || state.sessionId;
+        api("POST", "/session/" + encodeURIComponent(sid) + "/permission/" + encodeURIComponent(p.id || p.permissionID) + "/reply", {
+            decision: replyValue
         }).then(function() {
             state.replyError = "";
             return refresh();
@@ -772,11 +1100,39 @@
             renderPending();
         });
     }
-    function loadSessions() {
-        return api("GET", "/session").then(function(sessions) {
+    function loadSessions(attempt) {
+        var collected = [];
+        var seen = {};
+        function page(cursor, depth) {
+            // v2: Cursor-Seiten ohne "order" kombinieren (API: "Do not combine")
+            var url = "/session?limit=200" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "&order=asc");
+            return api("GET", url).then(function(res) {
+                var list = (res && res.data) || [];
+                list.forEach(function(s) {
+                    if (s && s.id && !seen[s.id]) {
+                        seen[s.id] = 1;
+                        collected.push(s);
+                    }
+                });
+                var next = res && res.cursor && res.cursor.next;
+                if (next && list.length && collected.length < 1000 && depth < 20) {
+                    return page(next, depth + 1);
+                }
+                return collected;
+            });
+        }
+        return page(null, 0).then(function(sessions) {
             state.sessions = (sessions || []).filter(function(s) {
                 return !s.parentID;
             });
+            // DOM nur bei Aenderungen neu bauen (weniger Flackern/Churn)
+            var sig = JSON.stringify(state.sessions.map(function(s) {
+                return [ s.id, s.title, s.outcome || "", s.cost || 0, s.tokens && (s.tokens.input || 0) + (s.tokens.output || 0) || 0 ];
+            }));
+            if (sig === state.lastSessionSig) {
+                return;
+            }
+            state.lastSessionSig = sig;
             el.sessionList.innerHTML = "";
             state.sessions.forEach(function(s) {
                 var li = document.createElement("li");
@@ -786,7 +1142,11 @@
                 }
                 var label = document.createElement("span");
                 label.className = "session-label";
-                label.textContent = s.title || s.id;
+                var outcomeIcon = s.outcome === "succeeded" ? "✓ " : s.outcome === "failed" ? "✗ " : s.outcome === "interrupted" ? "⏸ " : "";
+                label.textContent = outcomeIcon + (s.title || s.id);
+                if (s.outcome === "failed") {
+                    label.style.color = "#b3261e";
+                }
                 li.appendChild(label);
                 var del = document.createElement("button");
                 del.className = "session-delete";
@@ -805,7 +1165,7 @@
                         }, 2500);
                         return;
                     }
-                    api("DELETE", "/session/" + encodeURIComponent(s.id), {}).then(function() {
+                    api("DELETE", "/session/" + encodeURIComponent(s.id)).then(function() {
                         if (state.sessionId === s.id) {
                             state.sessionId = null;
                             state.lastRendered = null;
@@ -827,7 +1187,7 @@
     function refresh() {
         var jobs = [ loadSessions() ];
         if (state.sessionId) {
-            jobs.push(api("GET", "/session/" + state.sessionId + "/message").then(function(msgs) {
+            jobs.push(fetchAllMessages(state.sessionId).then(function(msgs) {
                 var wasGenerating = state.generating;
                 state.generating = state.forcedIdle ? false : (msgs || []).some(function(m) {
                     var info = m.info || m;
@@ -841,19 +1201,29 @@
                 state.lastMsgs = msgs;
                 updateControls();
             }));
-            jobs.push(api("GET", "/question").then(function(qs) {
-                var live = (qs || []).filter(function(q) {
-                    return !q.sessionID || q.sessionID === state.sessionId;
-                });
+            jobs.push(api("GET", "/form").then(function(res) {
+                var forms = unwrap(res) || [];
+                var live = forms.filter(function(f) {
+                    return !f.sessionID || f.sessionID === state.sessionId;
+                }).map(formToReq);
                 state.pendingQuestions = live.length ? live : liveQuestions(state.lastMsgs) || [];
                 renderPending();
             }).catch(function() {
                 state.pendingQuestions = liveQuestions(state.lastMsgs) || [];
             }));
-            jobs.push(api("GET", "/permission").then(function(ps) {
-                var list = Array.isArray(ps) ? ps : ps && ps.permissions || [];
+            jobs.push(api("GET", "/permission/request").then(function(res) {
+                var list = unwrap(res) || [];
                 state.pendingPermissions = list.filter(function(p) {
                     return !p.sessionID || p.sessionID === state.sessionId;
+                }).map(function(p) {
+                    var info = permInfo(p);
+                    return {
+                        id: p.id,
+                        sessionID: p.sessionID,
+                        title: info.title,
+                        meta: info.meta,
+                        type: p.action
+                    };
                 });
                 renderPending();
             }).catch(function() {
@@ -866,9 +1236,45 @@
     }
     function updateControls() {
         el.stopBtn.hidden = !state.generating;
-        el.sendBtn.disabled = state.generating;
+        if (el.diffBtn) {
+            el.diffBtn.hidden = !state.sessionId;
+        }
+        updateHeaderMeta();
+        // v2-Steer: Senden bleibt waehrend der Generierung moeglich
+        el.sendBtn.disabled = false;
         if (el.working) {
             el.working.hidden = !state.generating;
+        }
+    }
+    // Kosten/Tokens + Fork des aktiven Sessions im Header (statt in den
+    // Listen-Items, wo sie an schmalen Rndern ueberlagert wurden).
+    function updateHeaderMeta() {
+        var s = null;
+        for (var i = 0; i < state.sessions.length; i++) {
+            if (state.sessions[i].id === state.sessionId) {
+                s = state.sessions[i];
+                break;
+            }
+        }
+        var bits = [];
+        if (s) {
+            if (typeof s.cost === "number" && s.cost > 0) {
+                bits.push("$" + (s.cost >= 0.01 ? s.cost.toFixed(2) : s.cost.toFixed(4)));
+            }
+            if (s.tokens) {
+                var tok = (s.tokens.input || 0) + (s.tokens.output || 0);
+                if (tok > 0) {
+                    bits.push(tok >= 1000 ? (tok / 1000).toFixed(1) + "k" : String(tok));
+                }
+            }
+        }
+        if (el.sessionMeta) {
+            el.sessionMeta.hidden = !bits.length;
+            el.sessionMeta.textContent = bits.join(" · ");
+        }
+        if (el.forkBtn) {
+            el.forkBtn.hidden = !state.sessionId;
+            el.forkBtn.disabled = false;
         }
     }
     function selectSession(id) {
@@ -876,6 +1282,7 @@
         setUrl(id);
         state.lastRendered = null;
         state.lastPendingSig = null;
+        state.lastSessionSig = null;
         var s = state.sessions.find(function(x) {
             return x.id === id;
         });
@@ -1183,23 +1590,13 @@
     }
     function runCommand(found) {
         var cmd = found.command;
-        var body = {
-            command: cmd.name,
-            arguments: expandMentions(found.args)
-        };
-        var agent = cmd.agent || el.agentSelect && el.agentSelect.value || "";
-        if (agent) {
-            body.agent = agent;
-        }
-        var cmdModel = preferredModel();
-        if (cmdModel) {
-            body.model = cmdModel.providerID + "/" + cmdModel.modelID;
-        }
-        var ensure = state.sessionId ? Promise.resolve() : api("POST", "/session", {}).then(function(s) {
-            state.sessionId = s.id;
-            setUrl(s.id);
+        var ensure = state.sessionId ? Promise.resolve() : api("POST", "/session", {}).then(function(res) {
+            state.sessionId = unwrap(res).id;
+            setUrl(state.sessionId);
         });
         ensure.then(function() {
+            return applySessionPrefs(state.sessionId);
+        }).then(function() {
             el.prompt.value = "";
             el.prompt.style.height = "auto";
             state.forcedIdle = false;
@@ -1207,7 +1604,11 @@
             state.lastGenSig = null;
             state.generating = true;
             updateControls();
-            return api("POST", "/session/" + state.sessionId + "/command", body).then(function() {
+            // v2: { name, text } - Model/Agent kommen aus den Session-Prefs
+            return api("POST", "/session/" + state.sessionId + "/command", {
+                name: cmd.name,
+                text: expandMentions(found.args)
+            }).then(function() {
                 return refresh();
             }).catch(function(e) {
                 state.generating = false;
@@ -1235,51 +1636,48 @@
         });
     }
     function send(text) {
-        if (!text || state.generating) {
+        if (!text) {
             return;
         }
         var found = findCommand(text);
         if (found) {
+            // Commands nur im ruhenden Zustand - waehrend der Laufung steuern
+            if (state.generating) {
+                return;
+            }
             runCommand(found);
             return;
         }
+        // v2: while generating, the message "steers" into the current run
         text = expandMentions(text);
-        var body = {
-            parts: [ {
-                type: "text",
-                text: text
-            } ]
-        };
-        var pref = preferredModel();
-        if (pref) {
-            body.model = {
-                providerID: pref.providerID,
-                modelID: pref.modelID
-            };
-            var variant = modelVariantFor(pref);
-            if (variant) {
-                body.variant = variant;
-            }
-        }
-        var agent = el.agentSelect && el.agentSelect.value;
-        if (agent) {
-            body.agent = agent;
-        }
-        var ensure = state.sessionId ? Promise.resolve() : api("POST", "/session", {}).then(function(s) {
-            state.sessionId = s.id;
-            setUrl(s.id);
+        var ensure = state.sessionId ? Promise.resolve() : api("POST", "/session", {}).then(function(res) {
+            state.sessionId = unwrap(res).id;
+            setUrl(state.sessionId);
         });
         ensure.then(function() {
-            el.prompt.value = "";
-            el.prompt.style.height = "auto";
-            state.forcedIdle = false;
-            state.stalePolls = 0;
-            state.lastGenSig = null;
-            state.generating = true;
-            updateControls();
-            return api("POST", "/session/" + state.sessionId + "/prompt_async", body);
-        }).then(function() {
-            return refresh();
+            if (!state.generating) {
+                el.prompt.value = "";
+                el.prompt.style.height = "auto";
+                state.forcedIdle = false;
+                state.stalePolls = 0;
+                state.lastGenSig = null;
+                state.generating = true;
+                updateControls();
+                return applySessionPrefs(state.sessionId).then(function() {
+                    // v2: reiner Text-Prompt - Model/Agent/Variant kommen aus den Session-Prefs
+                    return api("POST", "/session/" + state.sessionId + "/prompt", {
+                        text: text
+                    });
+                }).then(function() {
+                    return refresh();
+                });
+            }
+            // Steer: laufende Session mit der Nachricht lenken
+            return api("POST", "/session/" + state.sessionId + "/prompt", {
+                text: text
+            }).then(function() {
+                return scheduleRefresh();
+            });
         }).catch(function(e) {
             state.generating = false;
             updateControls();
@@ -1358,8 +1756,119 @@
     });
     el.stopBtn.addEventListener("click", function() {
         if (state.sessionId) {
-            api("POST", "/session/" + state.sessionId + "/abort", {}).then(refresh).catch(function() {});
+            api("POST", "/session/" + state.sessionId + "/interrupt").then(refresh).catch(function() {});
         }
+    });
+    // ---- v2: Sitzung komprimieren ---------------------------------------------
+    el.compactBtn.addEventListener("click", function() {
+        if (!state.sessionId || el.compactBtn.disabled) {
+            return;
+        }
+        el.compactBtn.disabled = true;
+        api("POST", "/session/" + state.sessionId + "/compact", {}).then(function() {
+            el.compactBtn.disabled = false;
+            return refresh();
+        }).catch(function() {
+            el.compactBtn.disabled = false;
+        });
+    });
+    // ---- v2: Diff der Sitzung anzeigen ----------------------------------------
+    function diffFileBlock(f) {
+        var wrap = document.createElement("div");
+        wrap.className = "diff-file";
+        var cap = document.createElement("div");
+        cap.className = "diff-file-cap";
+        cap.innerHTML = esc(f.file) + ' <span class="diff-add">+' + f.additions + "</span> <span" + ' class="diff-del">-' + f.deletions + "</span> <em" + ' class="diff-status">(' + esc(f.status) + ")</em>";
+        wrap.appendChild(cap);
+        var pre = document.createElement("pre");
+        pre.textContent = f.patch || "";
+        wrap.appendChild(pre);
+        return wrap;
+    }
+    function openDiffModal(sessionFiles, projectFiles) {
+        if (!el.diffModal) {
+            return;
+        }
+        var body = el.diffModalBody;
+        body.innerHTML = "";
+        if (!sessionFiles.length) {
+            var empty = document.createElement("div");
+            empty.className = "diff-empty";
+            empty.textContent = t("diffEmpty");
+            body.appendChild(empty);
+            if (!projectFiles.length) {
+                var hint = document.createElement("div");
+                hint.className = "diff-hint";
+                hint.textContent = t("diffHint");
+                body.appendChild(hint);
+            }
+        }
+        sessionFiles.slice(0, 40).forEach(function(f) {
+            body.appendChild(diffFileBlock(f));
+        });
+        if (sessionFiles.length > 40) {
+            var more = document.createElement("div");
+            more.className = "diff-muted";
+            more.textContent = t("diffMoreFiles", { n: sessionFiles.length - 40 });
+            body.appendChild(more);
+        }
+        if (projectFiles.length) {
+            var ph = document.createElement("div");
+            ph.className = "diff-section";
+            ph.textContent = t("diffProject", { n: projectFiles.length });
+            body.appendChild(ph);
+            projectFiles.slice(0, 20).forEach(function(f) {
+                body.appendChild(diffFileBlock(f));
+            });
+            if (projectFiles.length > 20) {
+                var pmore = document.createElement("div");
+                pmore.className = "diff-muted";
+                pmore.textContent = t("diffMoreProj", { n: projectFiles.length - 20 });
+                body.appendChild(pmore);
+            }
+        }
+        el.diffModal.hidden = false;
+    }
+    function closeDiffModal() {
+        if (el.diffModal) {
+            el.diffModal.hidden = true;
+        }
+    }
+    el.diffBtn.addEventListener("click", function() {
+        if (!state.sessionId || el.diffBtn.disabled) {
+            return;
+        }
+        el.diffBtn.disabled = true;
+        Promise.all([
+            api("GET", "/session/" + state.sessionId + "/diff"),
+            api("GET", "/vcs/diff?mode=working&limit=25").catch(function() {
+                return null;
+            })
+        ]).then(function(results) {
+            el.diffBtn.disabled = false;
+            var sessionFiles = unwrap(results[0]) || [];
+            var projectFiles = results[1] ? (unwrap(results[1]) || []) : [];
+            openDiffModal(sessionFiles, projectFiles);
+        }).catch(function() {
+            el.diffBtn.disabled = false;
+        });
+    });
+    el.forkBtn.addEventListener("click", function() {
+        if (!state.sessionId || el.forkBtn.disabled) {
+            return;
+        }
+        el.forkBtn.disabled = true;
+        api("POST", "/session/" + state.sessionId + "/fork", {}).then(function(res) {
+            var ns = unwrap(res);
+            return loadSessions().then(function() {
+                if (ns && ns.id) {
+                    selectSession(ns.id);
+                }
+                el.forkBtn.disabled = false;
+            });
+        }).catch(function() {
+            el.forkBtn.disabled = false;
+        });
     });
     el.newChat.addEventListener("click", newChat);
     el.toggleSidebar.addEventListener("click", function() {
@@ -1372,6 +1881,16 @@
         el.questionModal.addEventListener("click", function(e) {
             if (e.target === el.questionModal) {
                 hideQuestionModal();
+            }
+        });
+    }
+    if (el.diffModalClose) {
+        el.diffModalClose.addEventListener("click", closeDiffModal);
+    }
+    if (el.diffModal) {
+        el.diffModal.addEventListener("click", function(e) {
+            if (e.target === el.diffModal) {
+                closeDiffModal();
             }
         });
     }
@@ -1557,5 +2076,12 @@
         loadSessions();
         refresh();
     });
-    setInterval(refresh, 1500);
+    setInterval(function() {
+        // SSE liefert gerade? Dann uebernimmt scheduleRefresh, kein fester Poll noetig
+        if (Date.now() - sseState.last < 2000) {
+            return;
+        }
+        refresh();
+    }, 1500);
+    startEvents();
 })();
