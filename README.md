@@ -110,12 +110,14 @@ Veronica runs on a generated opencode persona, assembled from **multiple rule fi
 ```
 <opencode-config>/persona/veronica/*.md        # shared rules (identity, style)
 <opencode-config>/persona/veronica-plan/*.md   # identity + plan-mode restrictions
+<opencode-config>/persona/veronica-chat/*.md   # extra rules for the chat default agent
 ```
 
 - Files are applied in filename order (`10-identity.md`, `20-style.md`, ...) - add your own `30-*.md` files to extend the persona
 - The files live in the (usually bind-mounted) opencode config directory - edit or add them on the host, then restart the container to reassemble
 - Generated agents: `<opencode-config>/agent/veronica.md` + `agent/veronica-plan.md` (**generated - do not edit**, overwritten at start). The plan variant carries `tools: {write,edit,patch: false}` so file changes are blocked at runtime
 - Both agents are hidden (`hidden: true`) - they never appear in the chat agent picker
+- Chat default agent: an additional generated agent `veronica-chat` (same persona, but **visible**) is the chat's default agent - the chat therefore runs as Veronica out of the box. `CHAT_OPENCODE_AGENT`/`OPENCODE_AGENT` override this default; extra rules for the chat variant go into `persona/veronica-chat/*.md`
 - Mount your own folder to take full control: `./veronica-persona:/home/application/.config/opencode/persona/veronica`
 
 ### Veronica user database (JSON, not public)
