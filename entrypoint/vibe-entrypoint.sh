@@ -347,6 +347,11 @@ WRAP
 
 cat > "$CONFIG_DIR/run/opencode-chat.sh" <<'WRAP'
 #!/bin/sh
+# opencode v2: der Server schuetzt seine API mit HTTP Basic Auth und erzeugt
+# bei jedem Start ein Zufallspasswort ("server password ..." im Log). Der
+# Wrapper startet den Server, extrahiert das Passwort und installiert es per
+# sudo-Helper als Authorization-Header im Apache-Routing. Danach tail't er das
+# Log fuer Supervisor/docker logs (stopasgroup raeumt alles weg).
 set -e
 export HOME=/home/application
 export PATH="/home/application/.opencode/bin:$PATH"
@@ -357,12 +362,39 @@ fi
 export OPENCODE_PROVIDER="${CHAT_OPENCODE_PROVIDER:-${OPENCODE_PROVIDER:-}}"
 export OPENCODE_MODEL="${CHAT_OPENCODE_MODEL:-${OPENCODE_MODEL:-}}"
 export OPENCODE_AGENT="${CHAT_OPENCODE_AGENT:-${OPENCODE_AGENT:-}}"
+KIND="chat"
+PORT="4577"
+PREFIX="${VIBE_PREFIX:-vibe}"
+LOG="/tmp/vibe/opencode-${KIND}.log"
+mkdir -p /tmp/vibe
+: > "$LOG"
 cd "${VIBE_PROJECT_DIR:-/app/project}"
-exec opencode serve --hostname 127.0.0.1 --port 4577 --print-logs --log-level INFO
+opencode serve --hostname 127.0.0.1 --port "$PORT" --print-logs --log-level info >> "$LOG" 2>&1 &
+SRV=$!
+tail -f "$LOG" 2>/dev/null &
+TAIL=$!
+PW=""
+i=0
+while [ $i -lt 240 ]; do
+    PW=$(sed -n 's/.*server password \([^ ]*\).*/\1/p' "$LOG" | tail -1)
+    [ -n "$PW" ] && break
+    kill -0 "$SRV" 2>/dev/null || break
+    i=$((i + 1))
+    sleep 1
+done
+if [ -n "$PW" ]; then
+    B64=$(printf 'opencode:%s' "$PW" | base64 | tr -d '\n')
+    sudo -n /usr/local/sbin/vibe-auth-update "/${PREFIX}-${KIND}/api/" "$B64" \
+        || echo "vibe-auth-update fehlgeschlagen - ${KIND}-API-Proxy bleibt unauthentifiziert" >&2
+else
+    echo "opencode-Passwort nicht gefunden - ${KIND}-API-Proxy bleibt unauthentifiziert" >&2
+fi
+wait "$SRV"
 WRAP
 
 cat > "$CONFIG_DIR/run/opencode-veronica.sh" <<'WRAP'
 #!/bin/sh
+# opencode v2: siehe opencode-chat.sh - Passwort-Extraktion + Apache-Injection.
 set -e
 export HOME=/home/application
 export PATH="/home/application/.opencode/bin:$PATH"
@@ -373,12 +405,38 @@ fi
 export OPENCODE_PROVIDER="${VERONICA_OPENCODE_PROVIDER:-${OPENCODE_PROVIDER:-}}"
 export OPENCODE_MODEL="${VERONICA_OPENCODE_MODEL:-${OPENCODE_MODEL:-}}"
 export OPENCODE_AGENT="${VERONICA_OPENCODE_AGENT:-${OPENCODE_AGENT:-}}"
+KIND="veronica"
+PORT="4578"
+PREFIX="${VIBE_PREFIX:-vibe}"
+LOG="/tmp/vibe/opencode-${KIND}.log"
+mkdir -p /tmp/vibe
+: > "$LOG"
 cd "${VIBE_PROJECT_DIR:-/app/project}"
 # Stagger the start: both opencode instances share the SQLite DB in
 # ~/.local/share/opencode - starting them at the same instant can crash
 # the second one with "database is locked" (supervisor then restarts it).
 sleep 3
-exec opencode serve --hostname 127.0.0.1 --port 4578 --print-logs --log-level INFO
+opencode serve --hostname 127.0.0.1 --port "$PORT" --print-logs --log-level info >> "$LOG" 2>&1 &
+SRV=$!
+tail -f "$LOG" 2>/dev/null &
+TAIL=$!
+PW=""
+i=0
+while [ $i -lt 240 ]; do
+    PW=$(sed -n 's/.*server password \([^ ]*\).*/\1/p' "$LOG" | tail -1)
+    [ -n "$PW" ] && break
+    kill -0 "$SRV" 2>/dev/null || break
+    i=$((i + 1))
+    sleep 1
+done
+if [ -n "$PW" ]; then
+    B64=$(printf 'opencode:%s' "$PW" | base64 | tr -d '\n')
+    sudo -n /usr/local/sbin/vibe-auth-update "/${PREFIX}-${KIND}/api/" "$B64" \
+        || echo "vibe-auth-update fehlgeschlagen - ${KIND}-API-Proxy bleibt unauthentifiziert" >&2
+else
+    echo "opencode-Passwort nicht gefunden - ${KIND}-API-Proxy bleibt unauthentifiziert" >&2
+fi
+wait "$SRV"
 WRAP
 
 # Tab title injection for the ttyd pages (nginx parity: sub_filter).
@@ -498,7 +556,7 @@ ProxyPass /${P}-chat/api/upload !
 Alias /${P}-chat/api/upload/file ${VIBE_HOME}/php/upload-api.php
 Alias /${P}-chat/api/upload/list ${VIBE_HOME}/php/upload-api.php
 Alias /${P}-chat/api/upload ${VIBE_HOME}/php/upload-api.php
-ProxyPass /${P}-chat/api/ http://127.0.0.1:4577/ retry=0
+ProxyPass /${P}-chat/api/ http://127.0.0.1:4577/api/ retry=0 flushpackets=on
 Alias /${P}-chat/models.json /home/application/.local/state/opencode/model.json
 <Location /${P}-chat/models.json>
 ${CHAT_MODELS_AUTH}
@@ -506,6 +564,10 @@ ${CHAT_MODELS_AUTH}
     Header set Cache-Control "no-cache"
 </Location>
 Alias /${P}-chat/ ${VIBE_HOME}/chat-www/
+# SPA-Fallback: Deep-Links wie /${P}-chat/ses_xxx serve index.html (Session-URL-Sync)
+<Directory ${VIBE_HOME}/chat-www>
+    FallbackResource /${P}-chat/index.html
+</Directory>
 RedirectMatch 301 ^/${P}-chat\$ /${P}-chat/
 
 <Location /${P}-veronica>
@@ -518,7 +580,7 @@ ProxyPass /${P}-veronica/api/upload !
 Alias /${P}-veronica/api/upload/file ${VIBE_HOME}/php/upload-api.php
 Alias /${P}-veronica/api/upload/list ${VIBE_HOME}/php/upload-api.php
 Alias /${P}-veronica/api/upload ${VIBE_HOME}/php/upload-api.php
-ProxyPass /${P}-veronica/api/ http://127.0.0.1:4578/ retry=0
+ProxyPass /${P}-veronica/api/ http://127.0.0.1:4578/api/ retry=0 flushpackets=on
 Alias /${P}-veronica/models.json /home/application/.local/state/opencode/model.json
 <Location /${P}-veronica/models.json>
 ${VERONICA_MODELS_AUTH}
@@ -526,6 +588,9 @@ ${VERONICA_MODELS_AUTH}
     Header set Cache-Control "no-cache"
 </Location>
 Alias /${P}-veronica/ ${VIBE_HOME}/veronica-www/
+<Directory ${VIBE_HOME}/veronica-www>
+    FallbackResource /${P}-veronica/index.html
+</Directory>
 RedirectMatch 301 ^/${P}-veronica\$ /${P}-veronica/
 
 <Location /${P}-diff>
@@ -595,6 +660,10 @@ ${SITE_DIR_AUTH}
 
     Include ${CONFIG_DIR}/apache-routing.conf
 
+    # Per-start opencode API password (Basic auth), installed at runtime by
+    # build/vibe-auth-update via sudo - see the opencode-* run wrappers.
+    IncludeOptional /etc/vibe/auth/*.conf
+
     ErrorLog /dev/stderr
     CustomLog /dev/stdout combined
 VHOST
@@ -648,14 +717,74 @@ chown -R application:application \
     || log "WARNING: opencode data dirs not writable by application user - settings/sessions may not persist"
 
 # ----------------------------------------------------------------------------
+# opencode v2: Session-Snapshots (Session-Diff, Undo/Revert) benoetigen ein
+# Git-Repository im Projektverzeichnis - ohne Repo bleiben Snapshots leer und
+# das Diff-Tool zeigt nichts. Fehlendes Repo: einmalig initialisieren und
+# einen Baseline-Commit anlegen. Credentials und Uploads bleiben ausgespart.
+# ----------------------------------------------------------------------------
+VIBE_PROJECT_ROOT="${VIBE_PROJECT_DIR:-/app/project}"
+if [ -d "$VIBE_PROJECT_ROOT" ] && [ ! -e "$VIBE_PROJECT_ROOT/.git" ]; then
+    if [ ! -f "$VIBE_PROJECT_ROOT/.gitignore" ]; then
+        printf '.env*\nincoming/\nnode_modules/\nvar/\n' > "$VIBE_PROJECT_ROOT/.gitignore"
+        chown application:application "$VIBE_PROJECT_ROOT/.gitignore" 2>/dev/null || true
+    fi
+    if sudo -u application env HOME=/home/application bash -lc "cd '$VIBE_PROJECT_ROOT' \
+        && git init -b main >/dev/null 2>&1 \
+        && git config user.name 'vibe4dock' \
+        && git config user.email 'vibe4dock@localhost' \
+        && git add -A \
+        && git commit -qm 'Baseline (vibe4dock)'"; then
+        log "git: Baseline-Repo in $VIBE_PROJECT_ROOT angelegt (Session-Diff/Undo aktiv)"
+    else
+        log "WARNING: Git-Baseline in $VIBE_PROJECT_ROOT fehlgeschlagen - Session-Diff/Revert bleiben ohne Snapshots"
+    fi
+fi
+
+# ----------------------------------------------------------------------------
+# opencode v2 credentials: V2 stores provider credentials in its SQLite DB and
+# only auto-imports the legacy auth.json in some flows. Convert + import it
+# explicitly while the DB has no credentials yet (idempotent on restarts -
+# allindocker mounts auth.json read-only, so it never gets rewritten).
+# ----------------------------------------------------------------------------
+VIBE_AUTH_JSON="/home/application/.local/share/opencode/auth.json"
+if [ -f "$VIBE_AUTH_JSON" ]; then
+    if ! sudo -u application env HOME=/home/application /home/application/.opencode/bin/opencode auth export 2>/dev/null | grep -q '"integrationID"'; then
+        sudo -u application env HOME=/home/application php -r '
+$in = "/home/application/.local/share/opencode/auth.json";
+$out = "/tmp/vibe-cred-import.json";
+$v1 = json_decode((string) file_get_contents($in), true);
+$list = [];
+$i = 0;
+foreach ((is_array($v1) ? $v1 : []) as $provider => $entry) {
+    if (!is_array($entry) || empty($entry["key"])) { continue; }
+    $list[] = ["id" => "imported" . $i++, "integrationID" => $provider, "label" => "imported",
+               "active" => true, "value" => ["type" => "key", "key" => (string) $entry["key"]]];
+}
+file_put_contents($out, json_encode($list));
+echo $out;
+' > /tmp/vibe-cred-import.path 2>/dev/null
+        if [ -s /tmp/vibe-cred-import.path ]; then
+            CRED_FILE=$(cat /tmp/vibe-cred-import.path)
+            if sudo -u application env HOME=/home/application \
+                /home/application/.opencode/bin/opencode auth import --standalone "$CRED_FILE" >/dev/null 2>&1; then
+                log "opencode: credentials aus auth.json importiert (v2 SQLite)"
+            else
+                log "WARNING: opencode auth import fehlgeschlagen - Provider-Credentials evtl. nicht aktiv"
+            fi
+            rm -f "$CRED_FILE" /tmp/vibe-cred-import.path
+        fi
+    fi
+fi
+
+# ----------------------------------------------------------------------------
 # Veronica persona: assembled from MULTI-FILE rule folders so the persona can
 # be extended flexibly (bind-mount or edit on the host, then restart):
 #   <opencode-config>/persona/veronica/*.md        - shared persona rules
 #   <opencode-config>/persona/veronica-plan/*.md   - identity + plan restrictions
-# The generated agent files (<opencode-config>/agent/*.md) are rebuilt from
+# The generated agent files (<opencode-config>/agents/*.md) are rebuilt from
 # these on every container start - do not edit them directly.
 # ----------------------------------------------------------------------------
-VIBE_OCODE_AGENT_DIR="/home/application/.config/opencode/agent"
+VIBE_OCODE_AGENT_DIR="/home/application/.config/opencode/agents"
 VIBE_PERSONA_DIR="/home/application/.config/opencode/persona"
 mkdir -p "$VIBE_OCODE_AGENT_DIR" "$VIBE_PERSONA_DIR/veronica" "$VIBE_PERSONA_DIR/veronica-plan"
 
@@ -730,13 +859,13 @@ PERSONA
 fi
 
 assemble_persona "veronica" "Veronica - Vibe4Dock assistant persona (internal)" ""
-assemble_persona "veronica-plan" "Veronica - Vibe4Dock assistant persona in plan mode, read-only (internal)" "tools:
-  write: false
-  edit: false
-  patch: false
-permission:
-  edit: deny
-  bash: deny"
+assemble_persona "veronica-plan" "Veronica - Vibe4Dock assistant persona in plan mode, read-only (internal)" "permissions:
+  - action: edit
+    resource: \"*\"
+    effect: deny
+  - action: shell
+    resource: \"*\"
+    effect: deny"
 
 chown -R application:application "$VIBE_OCODE_AGENT_DIR" "$VIBE_PERSONA_DIR" 2>/dev/null \
     || log "WARNING: Veronica persona not writable by application user"

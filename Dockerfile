@@ -41,7 +41,7 @@ RUN apt-get update \
 # Apache modules: API/WS proxying + output rewrite;
 # drop the webdevops template vhost (its <PHP_SOCKET> placeholders are only
 # filled by the webdevops entrypoint, which this image replaces)
-RUN a2enmod proxy_http proxy_wstunnel substitute \
+RUN a2enmod proxy_http proxy_wstunnel substitute headers \
     && rm -f /etc/apache2/sites-enabled/10-docker.conf
 
 # ttyd (web terminal)
@@ -49,9 +49,20 @@ RUN curl -fsSL https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86
         -o /usr/bin/ttyd \
     && chmod +x /usr/bin/ttyd
 
-# opencode CLI for the application user
+# opencode CLI (v2) for the application user.
+# v2 protects the serve API with per-start Basic auth; see build/vibe-auth-update
+# and the opencode-* wrappers in entrypoint/vibe-entrypoint.sh.
 RUN sudo -u application env HOME=/home/application bash -lc \
-        'curl -fsSL https://opencode.ai/install | bash -s --'
+        'curl -fsSL https://opencode.ai/v2/install | bash -s --'
+
+# Root helper: installs the per-start opencode API password into the Apache
+# routing (called via sudo by the opencode process wrappers).
+COPY build/vibe-auth-update /usr/local/sbin/vibe-auth-update
+RUN chmod 755 /usr/local/sbin/vibe-auth-update \
+    && echo 'application ALL=(root) NOPASSWD: /usr/local/sbin/vibe-auth-update' \
+        > /etc/sudoers.d/vibe-auth \
+    && chmod 440 /etc/sudoers.d/vibe-auth \
+    && mkdir -p /etc/vibe/auth
 
 # Application payload (lives outside /app so a project repo can be mounted there)
 COPY build/www /opt/vibe/www
